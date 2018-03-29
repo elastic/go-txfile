@@ -244,7 +244,7 @@ func TestQueueOperations(testing *testing.T) {
 				},
 				config: config{
 					File: txfile.Options{
-						MaxSize:  64 * 1024,
+						MaxSize:  128 * 1024,
 						PageSize: 4 * 1024,
 						Prealloc: true,
 					},

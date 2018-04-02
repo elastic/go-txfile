@@ -5,6 +5,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Add `(*pq.Reader).Begin/Done` to reuse a read transaction for multiple reads. PR #4
 
 ### Changed
 

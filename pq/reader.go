@@ -10,6 +10,8 @@ type Reader struct {
 	accessor *access
 	state    readState
 	active   bool
+
+	tx *txfile.Tx
 }
 
 type readState struct {
@@ -56,9 +58,30 @@ func (r *Reader) Available() uint {
 	return uint(r.state.endID - r.state.id)
 }
 
+// Begin starts a new read transaction, shared between multiple read calls.
+// User must execute Done, to close the file transaction.
+func (r *Reader) Begin() {
+	if r.tx != nil {
+		r.tx.Close()
+	}
+	r.tx = r.accessor.BeginRead()
+}
+
+// Done closes the active read transaction.
+func (r *Reader) Done() {
+	if r.tx == nil {
+		return
+	}
+
+	r.tx.Close()
+	r.tx = nil
+}
+
 // Read reads the contents of the current event into the buffer.
 // Returns 0 without reading if end of the current event has been reached.
 // Use `Next` to skip/continue reading the next event.
+// If Begin is not been called before Read, a temporary read transaction is
+// created.
 func (r *Reader) Read(b []byte) (int, error) {
 	if !r.active {
 		return -1, errClosed
@@ -73,8 +96,11 @@ func (r *Reader) Read(b []byte) (int, error) {
 }
 
 func (r *Reader) readInto(to []byte) ([]byte, error) {
-	tx := r.accessor.BeginRead()
-	defer tx.Close()
+	tx := r.tx
+	if tx == nil {
+		tx = r.accessor.BeginRead()
+		defer tx.Close()
+	}
 
 	n := r.state.eventBytes
 	if L := len(to); L < n {
@@ -112,13 +138,18 @@ func (r *Reader) readInto(to []byte) ([]byte, error) {
 // Next advances to the next event to be read. The event size in bytes is
 // returned.  A size of 0 is reported if no more event is available in the
 // queue.
+// If Begin is not been called before Next, a temporary read transaction is
+// created.
 func (r *Reader) Next() (int, error) {
 	if !r.active {
 		return -1, errClosed
 	}
 
-	tx := r.accessor.BeginRead()
-	defer tx.Close()
+	tx := r.tx
+	if tx == nil {
+		tx = r.accessor.BeginRead()
+		defer tx.Close()
+	}
 
 	cursor := makeTxCursor(tx, r.accessor, &r.state.cursor)
 

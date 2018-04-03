@@ -104,15 +104,19 @@ func (q *testQueue) read(n int) []string {
 		out = make([]string, 0, n)
 	}
 
+	reader := q.Reader()
+	reader.Begin()
+	defer reader.Done()
+
 	for n < 0 || len(out) < n {
-		sz, err := q.Reader().Next()
+		sz, err := reader.Next()
 		q.t.FatalOnError(err)
 		if sz <= 0 {
 			break
 		}
 
 		buf := make([]byte, sz)
-		_, err = q.Reader().Read(buf)
+		_, err = reader.Read(buf)
 		q.t.FatalOnError(err)
 
 		out = append(out, string(buf))

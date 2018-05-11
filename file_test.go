@@ -83,6 +83,65 @@ func TestTxFile(t *testing.T) {
 		return
 	}
 
+	assert.Run("grow file on re-open", func(assert *assertions) {
+		pageSize := uint(4096)
+		initSize := 50 * pageSize
+
+		cases := map[string]uint{
+			"new limit":     2 * initSize,
+			"same max size": initSize,
+			"unbound limit": 0,
+		}
+
+		for name, sz := range cases {
+			sz := sz
+			canAllocMore := sz == 0 || sz > initSize
+
+			assert.Run(name, func(assert *assertions) {
+				path, teardown := setupPath(assert, "")
+				defer teardown()
+
+				f, err := Open(path, os.ModePerm, Options{
+					MaxSize:  uint64(initSize),
+					PageSize: uint32(pageSize),
+				})
+				assert.FatalOnError(err)
+
+				// allocate all available pages
+				tx := f.Begin()
+				for {
+					_, err := tx.Alloc()
+					if err != nil {
+						break
+					}
+				}
+				assert.NoError(tx.Commit())
+				assert.FatalOnError(f.Close())
+
+				// re-open with new size
+				f, err = Open(path, os.ModePerm, Options{
+					MaxSize:  uint64(sz),
+					PageSize: uint32(pageSize),
+					Flags:    FlagUpdMaxSize,
+				})
+				assert.FatalOnError(err)
+
+				// check if we can allocate more pages
+				tx = f.Begin()
+				_, err = tx.Alloc()
+				if canAllocMore {
+					assert.NoError(err)
+				} else {
+					assert.Error(err)
+				}
+				assert.NoError(tx.Commit())
+
+				assert.NoError(f.Close())
+
+			})
+		}
+	})
+
 	assert.Run("start and close readonly transaction without reads", func(assert *assertions) {
 		f, teardown := setupTestFile(assert, Options{})
 		defer teardown()

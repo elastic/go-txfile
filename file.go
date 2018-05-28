@@ -35,7 +35,7 @@ type File struct {
 
 // Options provides common file options used when opening or creating a file.
 type Options struct {
-	// Aditional flags.
+	// Additional flags.
 	Flags Flag
 
 	// MaxSize sets the maximum file size in bytes. This should be a multiple of PageSize.
@@ -68,7 +68,7 @@ const (
 	// FlagUpdMaxSize updates the file max size setting. If not set, the max size
 	// setting is read from the file to be opened.
 	// The file will grow if MaxSize is larger then the current max size setting.
-	// If MaxSize is less then the files max size value, the file is tried to
+	// If MaxSize is less then the file's max size value, the file is tried to
 	// shrink dynamically whenever pages are freed. Freed pages are returned via
 	// `Truncate`.
 	FlagUpdMaxSize

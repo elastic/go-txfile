@@ -7,7 +7,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 - Add `(*pq.Reader).Begin/Done` to reuse a read transaction for multiple reads. PR #4
 - Add `Flags` to txfile.Options. PR #5
-- Add support to increase a files maxSize on open. PR #5
+- Add support to increase a file's maxSize on open. PR #5
 
 ### Changed
 

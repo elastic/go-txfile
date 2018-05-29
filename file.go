@@ -1,6 +1,7 @@
 package txfile
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/bits"
@@ -34,6 +35,9 @@ type File struct {
 
 // Options provides common file options used when opening or creating a file.
 type Options struct {
+	// Additional flags.
+	Flags Flag
+
 	// MaxSize sets the maximum file size in bytes. This should be a multiple of PageSize.
 	// If it's not a multiple of PageSize, the actual files maximum size is rounded downwards
 	// to the next multiple of PageSize.
@@ -51,6 +55,24 @@ type Options struct {
 	// Open file in readonly mode.
 	Readonly bool
 }
+
+// Flag configures file opening behavior.
+type Flag uint64
+
+const (
+	// FlagUnboundMaxSize configures the file max size to be unbound. This sets
+	// MaxSize to 0. If MaxSize and Prealloc is set, up to MaxSize bytes are
+	// preallocated on disk (truncate).
+	FlagUnboundMaxSize Flag = 1 << iota
+
+	// FlagUpdMaxSize updates the file max size setting. If not set, the max size
+	// setting is read from the file to be opened.
+	// The file will grow if MaxSize is larger then the current max size setting.
+	// If MaxSize is less then the file's max size value, the file is tried to
+	// shrink dynamically whenever pages are freed. Freed pages are returned via
+	// `Truncate`.
+	FlagUpdMaxSize
+)
 
 // Open opens or creates a new transactional file.
 // Open tries to create the file, if the file does not exist yet.  Returns an
@@ -90,11 +112,14 @@ func openWith(file vfsFile, opts Options) (*File, error) {
 		return nil, err
 	}
 
+	isNew := false
 	fileExists := sz > 0
 	if !fileExists {
 		if err := initNewFile(file, opts); err != nil {
 			return nil, err
 		}
+
+		isNew = true
 	}
 
 	meta, err := readValidMeta(file)
@@ -103,6 +128,7 @@ func openWith(file vfsFile, opts Options) (*File, error) {
 	}
 
 	pageSize := meta.pageSize.Get()
+
 	maxSize := meta.maxSize.Get()
 	if maxSize == 0 && opts.MaxSize > 0 {
 		maxSize = opts.MaxSize
@@ -112,12 +138,40 @@ func openWith(file vfsFile, opts Options) (*File, error) {
 		return nil, errFileSizeTooLage
 	}
 
-	return newFile(file, opts, uint(maxSize), uint(pageSize))
+	f, err := newFile(file, opts, uint(maxSize), uint(pageSize))
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the files MaxSize after the new file object has been created.
+	// This allows us to handle the max size update like a transaction.
+	if (!isNew && opts.Flags.Check(FlagUpdMaxSize)) && opts.MaxSize != maxSize {
+		ok := false
+		defer cleanup.IfNot(&ok, cleanup.IgnoreError(f.Close))
+
+		op := growFile
+		if opts.MaxSize > 0 && opts.MaxSize < maxSize {
+			op = shrinkFile
+		}
+
+		err := op(f, opts)
+		if err != nil {
+			return nil, err
+		}
+
+		ok = true
+	}
+
+	return f, nil
 }
 
 // newFile creates and initializes a new File. File state is initialized
 // from file and internal workers will be started.
-func newFile(file vfsFile, opts Options, maxSize, pageSize uint) (*File, error) {
+func newFile(
+	file vfsFile,
+	opts Options,
+	maxSize, pageSize uint,
+) (*File, error) {
 
 	f := &File{
 		file: file,
@@ -347,6 +401,11 @@ func initNewFile(file vfsFile, opts Options) error {
 		}
 	}
 
+	maxSize := opts.MaxSize
+	if opts.Flags.Check(FlagUnboundMaxSize) {
+		maxSize = 0
+	}
+
 	pageSize := opts.PageSize
 	if opts.PageSize == 0 {
 		pageSize = uint32(os.Getpagesize())
@@ -370,7 +429,7 @@ func initNewFile(file vfsFile, opts Options) error {
 	// write meta pages
 	for i := 0; i < 2; i++ {
 		pg := castMetaPage(buf[int(pageSize)*i:])
-		pg.Init(flags, pageSize, opts.MaxSize)
+		pg.Init(flags, pageSize, maxSize)
 		pg.txid.Set(uint64(1 - i))
 		pg.dataEndMarker.Set(2) // endMarker is index of next to be allocated page at end of file
 		pg.Finalize()
@@ -475,4 +534,69 @@ func computeMmapSize(minSize, maxSize, pageSize uint) (uint, error) {
 // found.
 func (f *File) getMetaPage() *metaPage {
 	return f.meta[f.metaActive]
+}
+
+func (f Flag) Check(check Flag) bool {
+	return (f & check) == check
+}
+
+// growFile executes a write transaction, growing the files max size setting.
+// If opts.Preallocate is set, the file will be truncated to the new file size on success.
+func growFile(f *File, opts Options) error {
+	tx := f.Begin()
+	defer tx.close()
+
+	// use write transactions commit locks. As file if being generated, the
+	// locks are not really required, yet. But better execute a correct transaction
+	// sequence, here.
+	pending, exclusive := tx.file.locks.Pending(), tx.file.locks.Exclusive()
+
+	pending.Lock()
+	defer pending.Lock()
+
+	exclusive.Lock()
+	defer exclusive.Lock()
+
+	// On function exit wait on writer to finish outstanding operations, in case
+	// we have to return early on error. On success, this is basically a no-op.
+	defer tx.writeSync.Wait()
+
+	// create new meta header for new ongoing write transaction
+	var newMetaBuf metaBuf
+	newMeta := newMetaBuf.cast()
+	*newMeta = *tx.file.getMetaPage()
+
+	// update max size
+	pageSize := uint(newMeta.pageSize.Get())
+	maxSize := uint(opts.MaxSize)
+	maxPages := maxSize / pageSize
+	maxSize = maxPages * pageSize // round new max size to multiple of page size
+	newMeta.maxSize.Set(uint64(maxSize))
+
+	// sync new transaction state to disk
+	metaID := 1 - tx.file.metaActive
+	tx.file.writer.Schedule(tx.writeSync, PageID(metaID), newMetaBuf[:])
+	tx.file.writer.Sync(tx.writeSync)
+
+	if err := tx.writeSync.Wait(); err != nil {
+		return fmt.Errorf("growing file transaction failed with %v", err)
+	}
+
+	// Transaction completed. Update file allocator limits
+	f.allocator.maxPages = maxPages
+	f.allocator.maxSize = maxSize
+	f.metaActive = metaID
+
+	// Allocate space on fisk if prealloc is enabled and new file size is bounded.
+	if !opts.Prealloc && maxSize > 0 {
+		if err := f.file.Truncate(int64(maxSize)); err != nil {
+			return fmt.Errorf("allocating space on disk failed with %v", err)
+		}
+	}
+
+	return nil
+}
+
+func shrinkFile(f *File, opts Options) error {
+	return errors.New("File shrinking is not supported")
 }

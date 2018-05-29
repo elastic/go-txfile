@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/elastic/go-txfile/internal/cleanup"
+	"github.com/elastic/go-txfile/internal/invariant"
 )
 
 // Tx provides access to pages in a File.
@@ -60,6 +61,7 @@ type txFlags struct {
 
 func newTx(file *File, lock sync.Locker, settings TxOptions) *Tx {
 	meta := file.getMetaPage()
+	invariant.Check(meta != nil, "file meta is not set")
 
 	rootID := meta.root.Get()
 	dataEndMarker := meta.dataEndMarker.Get()

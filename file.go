@@ -569,7 +569,8 @@ func shrinkFile(f *File, opts Options) error {
 // initTxMaxSize runs a write transaction, updating the file maxSize
 // to the newMaxSize value.
 // initTxMaxSize is used when opening an existing file.
-// On
+// As the file size must be a multiple of the file's page size, the number of
+// maximum pages and the actual max file size is returned on success.
 func initTxMaxSize(
 	f *File,
 	newMaxSize uint64,

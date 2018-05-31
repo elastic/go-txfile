@@ -363,7 +363,7 @@ func (tx *Tx) tryCommitChanges() error {
 	// 4. sync all new contents and metadata before updating the ondisk meta page.
 	tx.file.writer.Sync(tx.writeSync)
 
-	// 5. finalize on-disk transaction be writing new meta page.
+	// 5. finalize on-disk transaction by writing new meta page.
 	tx.file.wal.fileCommitMeta(newMeta, &csWAL)
 	tx.file.allocator.fileCommitMeta(newMeta, &csAlloc)
 	metaID := tx.syncNewMeta(&newMetaBuf)

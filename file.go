@@ -543,43 +543,55 @@ func (f Flag) Check(check Flag) bool {
 // growFile executes a write transaction, growing the files max size setting.
 // If opts.Preallocate is set, the file will be truncated to the new file size on success.
 func growFile(f *File, opts Options) error {
-	return withInitTx(f, func(tx *Tx) error {
+	maxPages, maxSize, metaID, err := initTxMaxSize(f, opts.MaxSize)
+	if err != nil {
+		return fmt.Errorf("growing file transaction failed with %v", err)
+	}
+
+	// Transaction completed. Update file allocator limits
+	f.allocator.maxPages = maxPages
+	f.allocator.maxSize = maxSize
+	f.metaActive = metaID
+
+	// Allocate space on fisk if prealloc is enabled and new file size is bounded.
+	if !opts.Prealloc && maxSize > 0 {
+		if err := f.file.Truncate(int64(maxSize)); err != nil {
+			return fmt.Errorf("allocating space on disk failed with %v", err)
+		}
+	}
+
+	return nil
+}
+
+func shrinkFile(f *File, opts Options) error {
+	return errors.New("File shrinking is not supported")
+}
+
+// initTxMaxSize runs a write transaction, updating the file maxSize
+// to the newMaxSize value.
+// initTxMaxSize is used when opening an existing file.
+// On
+func initTxMaxSize(
+	f *File,
+	newMaxSize uint64,
+) (maxPages, maxSize uint, metaID int, err error) {
+	err = withInitTx(f, func(tx *Tx) error {
 		// create new meta header for new ongoing write transaction
 		newMetaBuf := tx.prepareMetaBuffer()
 		newMeta := newMetaBuf.cast()
 
 		// update max size
 		pageSize := uint(newMeta.pageSize.Get())
-		maxSize := uint(opts.MaxSize)
-		maxPages := maxSize / pageSize
+		maxSize = uint(newMaxSize)
+		maxPages = maxSize / pageSize
 		maxSize = maxPages * pageSize // round new max size to multiple of page size
 		newMeta.maxSize.Set(uint64(maxSize))
 
 		// sync new transaction state to disk
-		metaID := tx.syncNewMeta(&newMetaBuf)
-
-		if err := tx.writeSync.Wait(); err != nil {
-			return fmt.Errorf("growing file transaction failed with %v", err)
-		}
-
-		// Transaction completed. Update file allocator limits
-		f.allocator.maxPages = maxPages
-		f.allocator.maxSize = maxSize
-		f.metaActive = metaID
-
-		// Allocate space on fisk if prealloc is enabled and new file size is bounded.
-		if !opts.Prealloc && maxSize > 0 {
-			if err := f.file.Truncate(int64(maxSize)); err != nil {
-				return fmt.Errorf("allocating space on disk failed with %v", err)
-			}
-		}
-
-		return nil
+		metaID = tx.syncNewMeta(&newMetaBuf)
+		return tx.writeSync.Wait()
 	})
-}
-
-func shrinkFile(f *File, opts Options) error {
-	return errors.New("File shrinking is not supported")
+	return
 }
 
 func withInitTx(f *File, fn func(tx *Tx) error) error {

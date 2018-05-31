@@ -545,15 +545,15 @@ func (f Flag) Check(check Flag) bool {
 func growFile(f *File, opts Options) error {
 	maxPages, maxSize, err := initTxMaxSize(f, opts.MaxSize)
 	if err != nil {
-		return fmt.Errorf("growing file transaction failed with %v", err)
+		return fmt.Errorf("growing max size transaction failed with %v", err)
 	}
 
 	// Transaction completed. Update file allocator limits
 	f.allocator.maxPages = maxPages
 	f.allocator.maxSize = maxSize
 
-	// Allocate space on fisk if prealloc is enabled and new file size is bounded.
-	if !opts.Prealloc && maxSize > 0 {
+	// Allocate space on disk if prealloc is enabled and new file size is bounded.
+	if opts.Prealloc && maxSize > 0 {
 		if err := f.file.Truncate(int64(maxSize)); err != nil {
 			return fmt.Errorf("allocating space on disk failed with %v", err)
 		}

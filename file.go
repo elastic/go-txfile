@@ -543,7 +543,7 @@ func (f Flag) Check(check Flag) bool {
 // growFile executes a write transaction, growing the files max size setting.
 // If opts.Preallocate is set, the file will be truncated to the new file size on success.
 func growFile(f *File, opts Options) error {
-	maxPages, maxSize, metaID, err := initTxMaxSize(f, opts.MaxSize)
+	maxPages, maxSize, err := initTxMaxSize(f, opts.MaxSize)
 	if err != nil {
 		return fmt.Errorf("growing file transaction failed with %v", err)
 	}
@@ -551,7 +551,6 @@ func growFile(f *File, opts Options) error {
 	// Transaction completed. Update file allocator limits
 	f.allocator.maxPages = maxPages
 	f.allocator.maxSize = maxSize
-	f.metaActive = metaID
 
 	// Allocate space on fisk if prealloc is enabled and new file size is bounded.
 	if !opts.Prealloc && maxSize > 0 {
@@ -574,7 +573,8 @@ func shrinkFile(f *File, opts Options) error {
 func initTxMaxSize(
 	f *File,
 	newMaxSize uint64,
-) (maxPages, maxSize uint, metaID int, err error) {
+) (maxPages, maxSize uint, err error) {
+	var metaID int
 	err = withInitTx(f, func(tx *Tx) error {
 		// create new meta header for new ongoing write transaction
 		newMetaBuf := tx.prepareMetaBuffer()
@@ -591,6 +591,10 @@ func initTxMaxSize(
 		metaID = tx.syncNewMeta(&newMetaBuf)
 		return tx.writeSync.Wait()
 	})
+
+	if err == nil {
+		f.metaActive = metaID
+	}
 	return
 }
 

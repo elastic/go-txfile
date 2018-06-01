@@ -96,49 +96,61 @@ func TestTxFile(t *testing.T) {
 		for name, sz := range cases {
 			sz := sz
 			canAllocMore := sz == 0 || sz > initSize
+			for _, reopen := range []bool{false, true} {
+				reopen := reopen
 
-			assert.Run(name, func(assert *assertions) {
-				path, teardown := setupPath(assert, "")
-				defer teardown()
+				assert.Run(fmt.Sprintf("%v - reopen:%v", name, reopen), func(assert *assertions) {
+					path, teardown := setupPath(assert, "")
+					defer teardown()
 
-				f, err := Open(path, os.ModePerm, Options{
-					MaxSize:  uint64(initSize),
-					PageSize: uint32(pageSize),
-				})
-				assert.FatalOnError(err)
+					f, err := Open(path, os.ModePerm, Options{
+						MaxSize:  uint64(initSize),
+						PageSize: uint32(pageSize),
+					})
+					assert.FatalOnError(err)
 
-				// allocate all available pages
-				tx := f.Begin()
-				for {
-					_, err := tx.Alloc()
-					if err != nil {
-						break
+					// allocate all available pages
+					tx := f.Begin()
+					for {
+						_, err := tx.Alloc()
+						if err != nil {
+							break
+						}
 					}
-				}
-				assert.NoError(tx.Commit())
-				assert.FatalOnError(f.Close())
+					assert.NoError(tx.Commit())
+					assert.FatalOnError(f.Close())
 
-				// re-open with new size
-				f, err = Open(path, os.ModePerm, Options{
-					MaxSize:  uint64(sz),
-					PageSize: uint32(pageSize),
-					Flags:    FlagUpdMaxSize,
+					// re-open with new size
+					f, err = Open(path, os.ModePerm, Options{
+						MaxSize:  uint64(sz),
+						PageSize: uint32(pageSize),
+						Flags:    FlagUpdMaxSize,
+					})
+					assert.FatalOnError(err)
+
+					if reopen {
+						// Close and re-open file again without updating the MaxSize.
+						// We require the recent `Open` operation to update the MaxSize on file.
+						assert.FatalOnError(f.Close())
+
+						f, err = Open(path, os.ModePerm, Options{})
+						assert.FatalOnError(err)
+					}
+
+					// check if we can allocate more pages
+					tx = f.Begin()
+					_, err = tx.Alloc()
+					if canAllocMore {
+						assert.NoError(err)
+					} else {
+						assert.Error(err)
+					}
+					assert.NoError(tx.Commit())
+
+					assert.NoError(f.Close())
+
 				})
-				assert.FatalOnError(err)
-
-				// check if we can allocate more pages
-				tx = f.Begin()
-				_, err = tx.Alloc()
-				if canAllocMore {
-					assert.NoError(err)
-				} else {
-					assert.Error(err)
-				}
-				assert.NoError(tx.Commit())
-
-				assert.NoError(f.Close())
-
-			})
+			}
 		}
 	})
 

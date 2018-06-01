@@ -312,11 +312,9 @@ func (tx *Tx) commitChanges() error {
 func (tx *Tx) tryCommitChanges() error {
 	pending, exclusive := tx.file.locks.Pending(), tx.file.locks.Exclusive()
 
-	var newMetaBuf metaBuf
+	newMetaBuf := tx.prepareMetaBuffer()
 	newMeta := newMetaBuf.cast()
-	*newMeta = *tx.file.getMetaPage()        // init new meta header from current active meta header
-	newMeta.txid.Set(1 + newMeta.txid.Get()) // inc txid
-	newMeta.root.Set(tx.rootID)              // update data root
+	newMeta.root.Set(tx.rootID) // update data root
 
 	// give concurrent read transactions a chance to complete, but don't allow
 	// for new read transactions to start while executing the commit
@@ -365,13 +363,10 @@ func (tx *Tx) tryCommitChanges() error {
 	// 4. sync all new contents and metadata before updating the ondisk meta page.
 	tx.file.writer.Sync(tx.writeSync)
 
-	// 5. finalize on-disk transaction be writing new meta page.
+	// 5. finalize on-disk transaction by writing new meta page.
 	tx.file.wal.fileCommitMeta(newMeta, &csWAL)
 	tx.file.allocator.fileCommitMeta(newMeta, &csAlloc)
-	newMeta.Finalize()
-	metaID := 1 - tx.file.metaActive
-	tx.file.writer.Schedule(tx.writeSync, PageID(metaID), newMetaBuf[:])
-	tx.file.writer.Sync(tx.writeSync)
+	metaID := tx.syncNewMeta(&newMetaBuf)
 
 	// 6. wait for all pages beeing written and synced,
 	//    before updating in memory state.
@@ -420,6 +415,23 @@ func (tx *Tx) tryCommitChanges() error {
 	traceln("  wal mapped pages:", len(tx.file.wal.mapping))
 
 	return nil
+}
+
+func (tx *Tx) prepareMetaBuffer() (buf metaBuf) {
+	meta := buf.cast()
+	*meta = *tx.file.getMetaPage()
+	meta.txid.Set(1 + meta.txid.Get())
+	return
+}
+
+func (tx *Tx) syncNewMeta(buf *metaBuf) int {
+	meta := buf.cast()
+	meta.Finalize()
+
+	metaID := 1 - tx.file.metaActive
+	tx.file.writer.Schedule(tx.writeSync, PageID(metaID), (*buf)[:])
+	tx.file.writer.Sync(tx.writeSync)
+	return metaID
 }
 
 func (tx *Tx) commitPrepareWAL() (walCommitState, error) {

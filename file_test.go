@@ -192,6 +192,31 @@ func TestTxFile(t *testing.T) {
 		assert.Error(err)
 	})
 
+	assert.Run("create file with pre-allocated meta area", func(assert *assertions) {
+		const (
+			totalPages = 100
+			metaArea   = 64
+			dataArea   = totalPages - metaArea - 2
+		)
+		f, teardown := setupTestFile(assert, Options{
+			PageSize:     4096,
+			MaxSize:      totalPages * 4096,
+			InitMetaArea: metaArea,
+		})
+		defer teardown()
+
+		f.withTx(true, func(tx *Tx) {
+			// Allocate all available data pages.
+			_, err := tx.AllocN(dataArea)
+			assert.FatalOnError(err)
+
+			// Allocating more pages must fail, due to most space being used by the
+			// meta area.
+			_, err = tx.Alloc()
+			assert.Error(err)
+		})
+	})
+
 	assert.Run("write transaction with modifications on new file with rollback", func(assert *assertions) {
 		f, teardown := setupTestFile(assert, Options{})
 		defer teardown()

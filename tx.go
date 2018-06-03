@@ -337,7 +337,7 @@ func (tx *Tx) tryCommitChanges() error {
 	}
 
 	var csAlloc allocCommitState
-	tx.file.allocator.fileCommitPrepare(&csAlloc, &tx.alloc)
+	tx.file.allocator.fileCommitPrepare(&csAlloc, &tx.alloc, false)
 
 	// 2. allocate new file pages for new meta data to be written
 	if err := tx.file.wal.fileCommitAlloc(tx, &csWAL); err != nil {
@@ -393,15 +393,32 @@ func (tx *Tx) tryCommitChanges() error {
 	// Switch the files active meta page to meta page being written.
 	tx.file.metaActive = metaID
 
-	// check + apply mmap update. If we fail here, the file and internal
-	// state is already updated + valid.
+	// Compare required file size with the real file size and the mmaped region.
+	// If the expected file size of the last transaction is < the real file size,
+	// we can truncate the file and update the mmaped region.
+	// If the expected file size is > the mmaped region, we need to update the mmaped file region.
+	// If we fail here, the file and internal state is already updated + valid.
 	// But mmap failed on us -> fatal error
+	mmapRequired := false
+
 	endMarker := tx.file.allocator.data.endMarker
 	if metaEnd := tx.file.allocator.meta.endMarker; metaEnd > endMarker {
 		endMarker = metaEnd
 	}
-	fileSize := uint(endMarker) * tx.file.allocator.pageSize
-	if int(fileSize) > len(tx.file.mapped) {
+
+	// compute maximum expected file size of current transaction
+	expectedMMapSize := int64(uint(endMarker) * tx.file.allocator.pageSize)
+	maxSize := int64(tx.file.allocator.maxSize)
+	pageSize := tx.file.allocator.pageSize
+	requiredFileSz, truncate := checkTruncate(&tx.alloc, tx.file.size, expectedMMapSize, maxSize, pageSize)
+	if truncate {
+		if err := tx.file.truncate(requiredFileSz); err == nil {
+			mmapRequired = true
+			tx.file.size = requiredFileSz
+		}
+	}
+
+	if mmapRequired || int(expectedMMapSize) > len(tx.file.mapped) {
 		err = tx.file.mmapUpdate()
 	}
 
@@ -415,6 +432,44 @@ func (tx *Tx) tryCommitChanges() error {
 	traceln("  wal mapped pages:", len(tx.file.wal.mapping))
 
 	return nil
+}
+
+func checkTruncate(
+	st *txAllocState,
+	sz, mmapSz, maxSz int64,
+	pageSize uint,
+) (int64, bool) {
+	if maxSz <= 0 { // file is unbounded, no truncate required
+		return 0, false
+	}
+
+	expectedFileSz := mmapSz
+	if expectedFileSz < maxSz {
+		expectedFileSz = maxSz
+	}
+
+	if expectedFileSz >= sz {
+		// Required size still surpasses the last known file size -> do not
+		// truncate.
+		return 0, false
+	}
+
+	lastEnd := st.data.endMarker
+	if metaEnd := st.meta.endMarker; metaEnd > lastEnd {
+		lastEnd = metaEnd
+	}
+
+	lastExpectedFileSz := int64(uint(lastEnd) * pageSize)
+	if lastExpectedFileSz < maxSz {
+		lastExpectedFileSz = maxSz
+	}
+
+	// Compute minimum required file size for the last two active transactions (maximum).
+	if lastExpectedFileSz > expectedFileSz {
+		expectedFileSz = lastExpectedFileSz
+	}
+
+	return expectedFileSz, expectedFileSz < sz
 }
 
 func (tx *Tx) prepareMetaBuffer() (buf metaBuf) {

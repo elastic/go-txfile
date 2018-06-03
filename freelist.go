@@ -361,6 +361,14 @@ func (f *freelist) RemoveRegion(removed region) {
 	f.avail -= total
 }
 
+func (f *freelist) LastRegion() region {
+	L := len(f.regions)
+	if L == 0 {
+		return region{}
+	}
+	return f.regions[L-1]
+}
+
 // (de-)serialization
 
 func readFreeList(

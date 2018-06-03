@@ -1,7 +1,6 @@
 package txfile
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"math/bits"
@@ -21,6 +20,7 @@ import (
 type File struct {
 	path      string
 	file      vfs.File
+	size      int64 // real file size
 	locks     lock
 	wg        sync.WaitGroup // local async workers wait group
 	writer    writer
@@ -97,7 +97,7 @@ func openWith(file vfs.File, opts Options) (*File, error) {
 		isNew = true
 	}
 
-	meta, err := readValidMeta(file)
+	meta, metaActive, err := readValidMeta(file)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func openWith(file vfs.File, opts Options) (*File, error) {
 		return nil, errFileSizeTooLage
 	}
 
-	f, err := newFile(file, opts, uint(maxSize), uint(pageSize))
+	f, err := newFile(file, opts, metaActive, uint(maxSize), uint(pageSize))
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +145,7 @@ func openWith(file vfs.File, opts Options) (*File, error) {
 func newFile(
 	file vfs.File,
 	opts Options,
+	metaActive int,
 	maxSize, pageSize uint,
 ) (*File, error) {
 
@@ -164,7 +165,7 @@ func newFile(
 	initOK := false
 	defer cleanup.IfNot(&initOK, cleanup.IgnoreError(f.munmap))
 
-	if err := f.init(opts); err != nil {
+	if err := f.init(metaActive, opts); err != nil {
 		return nil, err
 	}
 
@@ -184,34 +185,9 @@ func newFile(
 }
 
 // init initializes the File state from most recent valid meta-page.
-func (f *File) init(opts Options) error {
-	// validate meta pages and set active meta page id
-	var metaErr [2]error
-	metaErr[0] = f.meta[0].Validate()
-	metaErr[1] = f.meta[1].Validate()
-	switch {
-	case metaErr[0] != nil && metaErr[1] != nil:
-		return metaErr[0]
-	case metaErr[0] == nil && metaErr[1] != nil:
-		f.metaActive = 1
-	case metaErr[0] != nil && metaErr[1] == nil:
-		f.metaActive = 1
-	default:
-		// both meta pages valid, choose page with highest transaction number
-		tx0 := f.meta[0].txid.Get()
-		tx1 := f.meta[1].txid.Get()
-		if tx0 == tx1 {
-			panic("meta pages with same transaction id")
-		}
-
-		if int64(tx0-tx1) > 0 { // if tx0 > tx1
-			f.metaActive = 0
-		} else {
-			f.metaActive = 1
-		}
-	}
-
+func (f *File) init(metaActive int, opts Options) error {
 	// reference active meta page for initializing internal structures
+	f.metaActive = metaActive
 	meta := f.meta[f.metaActive]
 
 	if err := readWALMapping(&f.wal, f.mmapedPage, meta.wal.Get()); err != nil {
@@ -307,6 +283,10 @@ func (f *File) SplitOffset(offset uintptr) (PageID, uintptr) {
 	return id, off
 }
 
+func (f *File) truncate(sz int64) error {
+	return f.file.Truncate(sz)
+}
+
 // mmapUpdate updates the mmaped states.
 // A go-routine updating the mmaped aread, must hold all locks on the file.
 func (f *File) mmapUpdate() (err error) {
@@ -318,14 +298,15 @@ func (f *File) mmapUpdate() (err error) {
 
 // mmap maps the files contents and updates internal pointers into the mmaped memory area.
 func (f *File) mmap() error {
+	// update real file size
 	fileSize, err := f.file.Size()
 	if err != nil {
 		return err
 	}
-
 	if fileSize < 0 {
 		return errInvalidFileSize
 	}
+	f.size = fileSize
 
 	maxSize := f.allocator.maxSize
 	if em := uint(f.allocator.meta.endMarker); maxSize > 0 && em > f.allocator.maxPages {
@@ -457,21 +438,47 @@ func initNewFile(file vfs.File, opts Options) error {
 
 // readValidMeta tries to read a valid meta page from the file.
 // The first valid meta page encountered is returned.
-func readValidMeta(f vfs.File) (metaPage, error) {
-	meta, err := readMeta(f, 0)
+func readValidMeta(f vfs.File) (metaPage, int, error) {
+	var pages [2]metaPage
+	var metaErr [2]error
+	var metaActive int
+	var err error
+
+	pages[0], err = readMeta(f, 0)
 	if err != nil {
-		return meta, err
+		return metaPage{}, -1, err
 	}
 
-	if err := meta.Validate(); err != nil {
-		// try next metapage
-		offset := meta.pageSize.Get()
-		if meta, err = readMeta(f, int64(offset)); err != nil {
-			return meta, err
-		}
-		return meta, meta.Validate()
+	pages[1], err = readMeta(f, int64(pages[0].pageSize.Get()))
+	if err != nil {
+		return metaPage{}, -1, err
 	}
-	return meta, nil
+
+	metaErr[0] = pages[0].Validate()
+	metaErr[1] = pages[1].Validate()
+	switch {
+	case metaErr[0] != nil && metaErr[1] != nil:
+		return metaPage{}, -1, metaErr[0]
+	case metaErr[0] == nil && metaErr[1] != nil:
+		metaActive = 0
+	case metaErr[0] != nil && metaErr[1] == nil:
+		metaActive = 1
+	default:
+		// both meta pages valid, choose page with highest transaction number
+		tx0 := pages[0].txid.Get()
+		tx1 := pages[1].txid.Get()
+		if tx0 == tx1 {
+			panic("meta pages with same transaction id")
+		}
+
+		if int64(tx0-tx1) > 0 { // if tx0 > tx1
+			metaActive = 0
+		} else {
+			metaActive = 1
+		}
+	}
+
+	return pages[metaActive], metaActive, nil
 }
 
 func readMeta(f vfs.File, off int64) (metaPage, error) {
@@ -551,16 +558,47 @@ func growFile(f *File, opts Options) error {
 
 	// Allocate space on disk if prealloc is enabled and new file size is bounded.
 	if opts.Prealloc && maxSize > 0 {
-		if err := f.file.Truncate(int64(maxSize)); err != nil {
+		if err := f.truncate(int64(maxSize)); err != nil {
 			return fmt.Errorf("allocating space on disk failed with %v", err)
+		}
+		if err := f.mmapUpdate(); err != nil {
+			return fmt.Errorf("failed to mmap file %v", err)
 		}
 	}
 
 	return nil
 }
 
+// shrinkFile reconfigures the new max size to a smaller value and tries to
+// remove excessive pages from the free list.
+// The removal of excessive pages is done in a second transaction, that is
+// allowed to fail. Excessive pages are freed in future transactions anyways.
+// The file is not truncated yet, as the last 2 transaction must agree on the
+// actual file size before truncating. Truncation is postponed to later transactions.
 func shrinkFile(f *File, opts Options) error {
-	return errors.New("File shrinking is not supported")
+	// 1. Start transaction updating the file meta header only. This transaction must succeed.
+	maxPages, maxSize, err := initTxMaxSize(f, opts.MaxSize)
+	if err != nil {
+		return fmt.Errorf("shrinking max size transaction failed with %v", err)
+	}
+
+	// 2. Transaction completed. Update file allocator limits
+	f.allocator.maxPages = maxPages
+	f.allocator.maxSize = maxSize
+
+	canReleaseRegions := func(area *allocArea) bool {
+		end := area.freelist.LastRegion().End()
+		return end == area.endMarker && uint(area.endMarker) > maxPages
+	}
+
+	// 3. Start a new transaction, trying to remove pages from the freelist
+	data := &f.allocator.data
+	meta := &f.allocator.meta
+	if canReleaseRegions(data) || canReleaseRegions(meta) {
+		initTxReleaseRegions(f)
+	}
+
+	return nil
 }
 
 // initTxMaxSize runs a write transaction, updating the file maxSize
@@ -596,9 +634,61 @@ func initTxMaxSize(
 	return
 }
 
+// initTxReleaseRegions attempts to remove pages from the freelist, that exceed
+// the files max size. The transaction is not required to succeed. If it fails,
+// we just rollback. Subsequent write transactions will try to continue
+// retuning pages to the file systems.
+// The transaction is prone to fail if there is not enough space to serialize
+// the new freelist to.
+// initTxReleaseRegions should only be called if it's clear pages can be
+// removed. Otherwise an 'empty' transaction
+func initTxReleaseRegions(f *File) {
+	withInitTx(f, func(tx *Tx) error {
+		// Init new allocator commit state, returning current meta pages into the
+		// freelist.
+		var csAlloc allocCommitState
+		tx.file.allocator.fileCommitPrepare(&csAlloc, &tx.alloc, true)
+
+		// Compute new free lists and remove page ids > max file size from the end
+		// of the freelist. Pages to be freed must border on the files allocation
+		// end markers.
+		if err := tx.file.allocator.fileCommitAlloc(&csAlloc); err != nil {
+			return err
+		}
+
+		// Serialize new freelist to disk.
+		if err := tx.file.allocator.fileCommitSerialize(&csAlloc, tx.scheduleWrite); err != nil {
+			return err
+		}
+		tx.file.writer.Sync(tx.writeSync)
+
+		// Update file meta header.
+		newMetaBuf := tx.prepareMetaBuffer()
+		newMeta := newMetaBuf.cast()
+		tx.file.allocator.fileCommitMeta(newMeta, &csAlloc)
+		metaID := tx.syncNewMeta(&newMetaBuf)
+
+		// Finalize on-disk transaction.
+		if err := tx.writeSync.Wait(); err != nil {
+			return err
+		}
+
+		// Commit allocator changes to in-memory allocator.
+		tx.file.allocator.Commit(&csAlloc)
+
+		// Switch the files active meta page to meta page being written.
+		tx.file.metaActive = metaID
+
+		return nil
+	})
+}
+
 func withInitTx(f *File, fn func(tx *Tx) error) error {
 	tx := f.Begin()
 	defer tx.close()
+
+	commitOK := false
+	defer cleanup.IfNot(&commitOK, cleanup.IgnoreError(tx.rollbackChanges))
 
 	// use write transactions commit locks. As file if being generated, the
 	// locks are not really required, yet. But better execute a correct transaction
@@ -615,5 +705,7 @@ func withInitTx(f *File, fn func(tx *Tx) error) error {
 	// we have to return early on error. On success, this is basically a no-op.
 	defer tx.writeSync.Wait()
 
-	return fn(tx)
+	err := fn(tx)
+	commitOK = err == nil
+	return err
 }

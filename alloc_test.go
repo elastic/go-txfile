@@ -184,7 +184,9 @@ func testDataAllocator(assert *assertions, runner allocatorTestRunner) {
 		regions.EachPage(func(id PageID) { allocator.Free(&tx, id) })
 
 		// commit transaction state:
-		state.data.commit(mergeRegionLists(state.data.freelist.regions, tx.data.freed.Regions()))
+		state.data.commit(
+			state.data.endMarker,
+			mergeRegionLists(state.data.freelist.regions, tx.data.freed.Regions()))
 
 		// validate
 		tx = state.makeTxAllocState(false, 0)
@@ -459,8 +461,12 @@ func testMetaAllocator(assert *assertions, runner allocatorTestRunner) {
 		allocator.FreeRegions(&tx, regions)
 
 		// commit transaction state:
-		state.data.commit(mergeRegionLists(state.data.freelist.regions, tx.data.freed.Regions()))
-		state.meta.commit(mergeRegionLists(state.meta.freelist.regions, tx.meta.freed.Regions()))
+		state.data.commit(
+			state.data.endMarker,
+			mergeRegionLists(state.data.freelist.regions, tx.data.freed.Regions()))
+		state.meta.commit(
+			state.meta.endMarker,
+			mergeRegionLists(state.meta.freelist.regions, tx.meta.freed.Regions()))
 
 		// validate
 		tx = state.makeTxAllocState(false, 0)

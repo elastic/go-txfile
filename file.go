@@ -433,6 +433,7 @@ func initNewFile(file vfsFile, opts Options) error {
 		pg.dataEndMarker.Set(dataEndMarker) // endMarker is index of next to be allocated page at end of file
 		pg.metaEndMarker.Set(metaEndMarker)
 		pg.metaTotal.Set(uint64(metaTotal))
+		pg.freelist.Set(freelistPage)
 		pg.Finalize()
 	}
 

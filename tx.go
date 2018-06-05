@@ -399,27 +399,24 @@ func (tx *Tx) tryCommitChanges() error {
 	// If the expected file size is > the mmaped region, we need to update the mmaped file region.
 	// If we fail here, the file and internal state is already updated + valid.
 	// But mmap failed on us -> fatal error
-	mmapRequired := false
-
 	endMarker := tx.file.allocator.data.endMarker
 	if metaEnd := tx.file.allocator.meta.endMarker; metaEnd > endMarker {
 		endMarker = metaEnd
 	}
 
-	// compute maximum expected file size of current transaction
+	// Compute maximum expected file size of current transaction
+	// and update the memory mapping if required.
 	expectedMMapSize := int64(uint(endMarker) * tx.file.allocator.pageSize)
 	maxSize := int64(tx.file.allocator.maxSize)
 	pageSize := tx.file.allocator.pageSize
 	requiredFileSz, truncate := checkTruncate(&tx.alloc, tx.file.size, expectedMMapSize, maxSize, pageSize)
 	if truncate {
-		if err := tx.file.truncate(requiredFileSz); err == nil {
-			mmapRequired = true
-			tx.file.size = requiredFileSz
-		}
-	}
-
-	if mmapRequired || int(expectedMMapSize) > len(tx.file.mapped) {
+		err = tx.file.truncate(requiredFileSz)
+	} else if int(expectedMMapSize) > len(tx.file.mapped) {
 		err = tx.file.mmapUpdate()
+	}
+	if err != nil {
+		return err
 	}
 
 	traceln("tx stats:")
@@ -552,7 +549,9 @@ func (tx *Tx) rollbackChanges() error {
 
 	truncateSz := uint(endMarker) * tx.file.allocator.pageSize
 	if uint(sz) > uint(truncateSz) {
-		return tx.file.file.Truncate(int64(truncateSz))
+		// ignore truncate error, as truncating a memory mapped file might not be
+		// supported by all OSes/filesystems.
+		tx.file.file.Truncate(int64(truncateSz))
 	}
 
 	return nil

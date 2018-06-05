@@ -283,8 +283,28 @@ func (f *File) SplitOffset(offset uintptr) (PageID, uintptr) {
 	return id, off
 }
 
+// truncate updates the file memory-mapping and truncates the file.
+// The function ensure the file is not mmapped, so to deal with OSes and
+// filesystem not properly truncating mmapped files.
+// Due to the memory mapping being updated while truncating, all file locks
+// must be held, ensuring no other transaction can read from the file.
 func (f *File) truncate(sz int64) error {
-	return f.file.Truncate(sz)
+	isMMapped := f.mapped != nil
+
+	if isMMapped {
+		if err := f.munmap(); err != nil {
+			return err
+		}
+	}
+
+	if err := f.file.Truncate(sz); err != nil {
+		return err
+	}
+
+	if isMMapped {
+		return f.mmap()
+	}
+	return nil
 }
 
 // mmapUpdate updates the mmaped states.

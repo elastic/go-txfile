@@ -33,45 +33,14 @@ type File struct {
 	metaActive int
 }
 
-// Options provides common file options used when opening or creating a file.
-type Options struct {
-	// Additional flags.
-	Flags Flag
-
-	// MaxSize sets the maximum file size in bytes. This should be a multiple of PageSize.
-	// If it's not a multiple of PageSize, the actual files maximum size is rounded downwards
-	// to the next multiple of PageSize.
-	// A value of 0 indicates the file can grow without limits.
-	MaxSize uint64
-
-	// PageSize sets the files page size on file creation. PageSize is ignored if
-	// the file already exists.
-	// If PageSize is not configured, the OSes main memory page size is selected.
-	PageSize uint32
-
-	// Prealloc disk space if MaxSize is set.
-	Prealloc bool
-
-	// Open file in readonly mode.
-	Readonly bool
-}
-
-// Flag configures file opening behavior.
-type Flag uint64
-
+// internal contants
 const (
-	// FlagUnboundMaxSize configures the file max size to be unbound. This sets
-	// MaxSize to 0. If MaxSize and Prealloc is set, up to MaxSize bytes are
-	// preallocated on disk (truncate).
-	FlagUnboundMaxSize Flag = 1 << iota
+	initBits    uint = 16            // 2 ^ 16 Bytes
+	initSize         = 1 << initBits // 64KB
+	sz1GB            = 1 << 30
+	doubleLimit      = sz1GB // upper limit when to stop doubling the mmaped area
 
-	// FlagUpdMaxSize updates the file max size setting. If not set, the max size
-	// setting is read from the file to be opened.
-	// The file will grow if MaxSize is larger then the current max size setting.
-	// If MaxSize is less then the file's max size value, the file is tried to
-	// shrink dynamically whenever pages are freed. Freed pages are returned via
-	// `Truncate`.
-	FlagUpdMaxSize
+	minRequiredFileSize = initSize
 )
 
 // Open opens or creates a new transactional file.
@@ -79,6 +48,10 @@ const (
 // error if file access fails, file can not be locked or file meta pages are
 // found to be invalid.
 func Open(path string, mode os.FileMode, opts Options) (*File, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
+
 	file, err := openOSFile(path, mode)
 	if err != nil {
 		return nil, err
@@ -420,23 +393,52 @@ func initNewFile(file vfsFile, opts Options) error {
 		return fmt.Errorf("pageSize must be > %v", minPageSize)
 	}
 
-	// create buffer to hold contents for the four initial pages:
+	// create buffer to hold contents for the initial pages:
 	// 1. meta page 0
 	// 2. meta page 1
-	// 3. free list page
+	// 3. free list page (only of opts.InitMetaArea > 0)
 	buf := make([]byte, pageSize*3)
 
-	// write meta pages
+	// create freelist with meta area only and pre-compute page IDs
+	requiredPages := 2
+	metaTotal := opts.InitMetaArea
+	dataEndMarker := PageID(2)
+	metaEndMarker := PageID(0) // no meta area
+	freelistPage := PageID(0)
+	if metaTotal > 0 {
+		requiredPages = 3
+		freelistPage = PageID(2)
+
+		// move pages from data area to new meta area by updating markers
+		dataEndMarker += PageID(metaTotal)
+		metaEndMarker = dataEndMarker
+
+		// write freelist, so to make meta page allocatable
+		hdr, body := castFreePage(buf[int(pageSize)*2:])
+		hdr.next.Set(0)
+		if metaTotal > 1 {
+			hdr.count.Set(1)
+			encodeRegion(body, true, region{
+				id:    freelistPage + 1,
+				count: metaTotal - 1,
+			})
+		}
+	}
+
+	// create meta pages
 	for i := 0; i < 2; i++ {
 		pg := castMetaPage(buf[int(pageSize)*i:])
 		pg.Init(flags, pageSize, maxSize)
 		pg.txid.Set(uint64(1 - i))
-		pg.dataEndMarker.Set(2) // endMarker is index of next to be allocated page at end of file
+		pg.dataEndMarker.Set(dataEndMarker) // endMarker is index of next to be allocated page at end of file
+		pg.metaEndMarker.Set(metaEndMarker)
+		pg.metaTotal.Set(uint64(metaTotal))
+		pg.freelist.Set(freelistPage)
 		pg.Finalize()
 	}
 
 	// write initial pages to disk
-	err := writeAt(file, buf, 0)
+	err := writeAt(file, buf[:int(pageSize)*requiredPages], 0)
 	if err == nil {
 		err = file.Sync()
 	}
@@ -477,13 +479,6 @@ func readMeta(f vfsFile, off int64) (metaPage, error) {
 // That is, exponential grows with values of 64KB, 128KB, 512KB, 1024KB, and so on.
 // Once 1GB is reached, the mmaped area is always a multiple of 1GB.
 func computeMmapSize(minSize, maxSize, pageSize uint) (uint, error) {
-	const (
-		initBits    uint = 16            // 2 ^ 16 Bytes
-		initSize         = 1 << initBits // 64KB
-		sz1GB            = 1 << 30
-		doubleLimit      = sz1GB // upper limit when to stop doubling the mmaped area
-	)
-
 	var maxMapSize uint
 	if math.MaxUint32 == maxUint {
 		maxMapSize = 2 * sz1GB
@@ -534,10 +529,6 @@ func computeMmapSize(minSize, maxSize, pageSize uint) (uint, error) {
 // found.
 func (f *File) getMetaPage() *metaPage {
 	return f.meta[f.metaActive]
-}
-
-func (f Flag) Check(check Flag) bool {
-	return (f & check) == check
 }
 
 // growFile executes a write transaction, growing the files max size setting.

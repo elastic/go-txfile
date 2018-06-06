@@ -3,6 +3,9 @@ package txfile
 import "errors"
 
 var (
+	// settings errors
+	errReadOnlyUpdateSize = errors.New("can not update the file size in read only mode")
+
 	// file meta page validation errors
 
 	errMagic    = errors.New("invalid magic number")

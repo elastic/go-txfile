@@ -192,6 +192,72 @@ func TestTxFile(t *testing.T) {
 		assert.Error(err)
 	})
 
+	assert.Run("pre-allocate meta area", func(assert *assertions) {
+		assert.Run("available pages do not exceeds total number of pages", func(assert *assertions) {
+			const (
+				totalPages = 100
+				metaArea   = 64
+				dataArea   = totalPages - metaArea - 2
+			)
+			f, teardown := setupTestFile(assert, Options{
+				PageSize:     4096,
+				MaxSize:      totalPages * 4096,
+				InitMetaArea: metaArea,
+			})
+			defer teardown()
+
+			f.withTx(true, func(tx *Tx) {
+				// Allocate all available data pages.
+				_, err := tx.AllocN(dataArea)
+				assert.FatalOnError(err)
+
+				// Allocating more pages must fail, due to most space being used by the
+				// meta area.
+				_, err = tx.Alloc()
+				assert.Error(err)
+			})
+		})
+
+		assert.Run("check meta area is used", func(assert *assertions) {
+			/* Allocate all data pages and free some, forcing the file to create a
+			 * new freelist, that must be written to the existing meta area. Trying to
+			 * allocate more pages from the data area into the meta area would fail
+			 * with OOM.
+			 */
+
+			const (
+				totalPages = 100
+				metaPages  = 2
+				metaArea   = 64
+				dataArea   = totalPages - metaArea - metaPages
+			)
+			f, teardown := setupTestFile(assert, Options{
+				PageSize:     4096,
+				MaxSize:      totalPages * 4096,
+				InitMetaArea: metaArea,
+			})
+			defer teardown()
+
+			// allocate all free space
+			f.withTx(true, func(tx *Tx) {
+				_, err := tx.AllocN(dataArea)
+				assert.FatalOnError(err)
+				assert.FatalOnError(tx.Commit())
+			})
+
+			// return some pages, forcing a freelist update
+			f.withTx(true, func(tx *Tx) {
+				// find ID in middle of allocated data area
+				page, err := tx.Page(metaArea + metaPages + 5)
+				assert.FatalOnError(err)
+				page.Free()
+
+				assert.FatalOnError(tx.Commit())
+			})
+
+		})
+	})
+
 	assert.Run("write transaction with modifications on new file with rollback", func(assert *assertions) {
 		f, teardown := setupTestFile(assert, Options{})
 		defer teardown()

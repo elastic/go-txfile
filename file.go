@@ -11,6 +11,8 @@ import (
 
 	"github.com/elastic/go-txfile/internal/cleanup"
 	"github.com/elastic/go-txfile/internal/invariant"
+	"github.com/elastic/go-txfile/internal/vfs"
+	"github.com/elastic/go-txfile/internal/vfs/osfs"
 )
 
 // File provides transactional support to pages of a file. A file is split into
@@ -18,7 +20,7 @@ import (
 // from within active transactions.
 type File struct {
 	path      string
-	file      vfsFile
+	file      vfs.File
 	locks     lock
 	wg        sync.WaitGroup // local async workers wait group
 	writer    writer
@@ -52,7 +54,7 @@ func Open(path string, mode os.FileMode, opts Options) (*File, error) {
 		return nil, err
 	}
 
-	file, err := openOSFile(path, mode)
+	file, err := osfs.Open(path, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +81,7 @@ func Open(path string, mode os.FileMode, opts Options) (*File, error) {
 
 // openWith implements the actual opening sequence, including file
 // initialization and validation.
-func openWith(file vfsFile, opts Options) (*File, error) {
+func openWith(file vfs.File, opts Options) (*File, error) {
 	sz, err := file.Size()
 	if err != nil {
 		return nil, err
@@ -141,7 +143,7 @@ func openWith(file vfsFile, opts Options) (*File, error) {
 // newFile creates and initializes a new File. File state is initialized
 // from file and internal workers will be started.
 func newFile(
-	file vfsFile,
+	file vfs.File,
 	opts Options,
 	maxSize, pageSize uint,
 ) (*File, error) {
@@ -365,7 +367,7 @@ func (f *File) mmapedPage(id PageID) []byte {
 }
 
 // initNewFile initializes a new, yet empty Files metapages.
-func initNewFile(file vfsFile, opts Options) error {
+func initNewFile(file vfs.File, opts Options) error {
 	var flags uint32
 	if opts.MaxSize > 0 && opts.Prealloc {
 		flags |= metaFlagPrealloc
@@ -451,7 +453,7 @@ func initNewFile(file vfsFile, opts Options) error {
 
 // readValidMeta tries to read a valid meta page from the file.
 // The first valid meta page encountered is returned.
-func readValidMeta(f vfsFile) (metaPage, error) {
+func readValidMeta(f vfs.File) (metaPage, error) {
 	meta, err := readMeta(f, 0)
 	if err != nil {
 		return meta, err
@@ -468,7 +470,7 @@ func readValidMeta(f vfsFile) (metaPage, error) {
 	return meta, nil
 }
 
-func readMeta(f vfsFile, off int64) (metaPage, error) {
+func readMeta(f vfs.File, off int64) (metaPage, error) {
 	var buf [unsafe.Sizeof(metaPage{})]byte
 	_, err := f.ReadAt(buf[:], off)
 	return *castMetaPage(buf[:]), err

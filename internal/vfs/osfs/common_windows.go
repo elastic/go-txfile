@@ -1,26 +1,19 @@
-package txfile
+package osfs
 
 import (
-	"fmt"
 	"os"
 	"reflect"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
-
-	"github.com/theckman/go-flock"
 )
 
 type osFileState struct {
 	mmapHandle windows.Handle
-	lock       *flock.Flock
+	lock       lockState
 }
 
-const (
-	lockExt = ".lock"
-)
-
-func (f *osFile) MMap(sz int) ([]byte, error) {
+func (f *File) MMap(sz int) ([]byte, error) {
 	szhi, szlo := uint32(sz>>32), uint32(sz)
 	hdl, err := windows.CreateFileMapping(windows.Handle(f.Fd()), nil, windows.PAGE_READONLY, szhi, szlo, nil)
 	if hdl == 0 {
@@ -43,7 +36,7 @@ func (f *osFile) MMap(sz int) ([]byte, error) {
 	return slice, nil
 }
 
-func (f *osFile) MUnmap(b []byte) error {
+func (f *File) MUnmap(b []byte) error {
 	err1 := windows.UnmapViewOfFile(uintptr(unsafe.Pointer(&b[0])))
 	b = nil
 
@@ -56,43 +49,4 @@ func (f *osFile) MUnmap(b []byte) error {
 		return os.NewSyscallError("CloseHandle", err2)
 	}
 	return nil
-}
-
-func (f *osFile) Lock(exclusive, blocking bool) error {
-	if f.state.lock != nil {
-		return fmt.Errorf("file %v is already locked", f.Name())
-	}
-
-	var ok bool
-	var err error
-	lock := flock.NewFlock(f.Name() + lockExt)
-	if blocking {
-		err = lock.Lock()
-		ok = err != nil
-	} else {
-		ok, err = lock.TryLock()
-	}
-
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return fmt.Errorf("file %v can not be locked right now", f.Name())
-	}
-
-	f.state.lock = lock
-	return nil
-}
-
-func (f *osFile) Unlock() error {
-	if f.state.lock == nil {
-		return fmt.Errorf("file %v is not locked", f.Name())
-	}
-
-	err := f.state.lock.Unlock()
-	if err == nil {
-		f.state.lock = nil
-	}
-
-	return err
 }

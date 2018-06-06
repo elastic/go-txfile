@@ -65,9 +65,9 @@ func (t *T) Logf(fmt string, vs ...interface{}) {
 	t.T.Logf(fmt, vs...)
 }
 
-func (t *T) Fatal(v interface{}) {
+func (t *T) Fatal(v ...interface{}) {
 	t.T.Helper()
-	t.T.Fatal(v)
+	t.T.Fatal(v...)
 }
 
 func (t *T) FatalOnError(err error, msgAndArgs ...interface{}) {

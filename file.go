@@ -446,7 +446,7 @@ func initNewFile(file vfs.File, opts Options) error {
 	// write initial pages to disk
 	err := writeAt(file, buf[:int(pageSize)*requiredPages], 0)
 	if err == nil {
-		err = file.Sync()
+		err = file.Sync(vfs.SyncAll)
 	}
 
 	if err != nil {

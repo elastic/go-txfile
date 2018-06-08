@@ -4,6 +4,8 @@ import (
 	"io"
 	"sort"
 	"sync"
+
+	"github.com/elastic/go-txfile/internal/vfs"
 )
 
 type writer struct {
@@ -41,7 +43,7 @@ type txWriteSync struct {
 
 type writable interface {
 	io.WriterAt
-	Sync() error
+	Sync(vfs.SyncFlag) error
 }
 
 func (w *writer) Init(target writable, pageSize uint) {
@@ -139,7 +141,7 @@ func (w *writer) Run() error {
 
 		if fsync != nil {
 			if err == nil {
-				if err = w.target.Sync(); err != nil {
+				if err = w.target.Sync(vfs.SyncAll); err != nil {
 					fsync.err = err
 				}
 			}

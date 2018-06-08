@@ -4,6 +4,8 @@ package osfs
 
 import "golang.org/x/sys/unix"
 
+type mmapState struct{}
+
 func (f *File) MMap(sz int) ([]byte, error) {
 	return unix.Mmap(int(f.Fd()), 0, int(sz), unix.PROT_READ, unix.MAP_SHARED)
 }

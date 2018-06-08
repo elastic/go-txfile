@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/elastic/go-txfile/internal/vfs"
 )
 
 type (
@@ -244,7 +246,7 @@ func newTestWriter(to writable, pagesize uint) (*writer, func() error) {
 	}
 }
 
-func (w *testWriterTarget) Sync() error { return w.sync() }
+func (w *testWriterTarget) Sync(_ vfs.SyncFlag) error { return w.sync() }
 func (w *testWriterTarget) WriteAt(p []byte, off int64) (n int, err error) {
 	return w.writeAt(p, off)
 }

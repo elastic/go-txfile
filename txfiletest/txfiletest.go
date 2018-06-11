@@ -2,12 +2,11 @@
 package txfiletest
 
 import (
-	"io/ioutil"
 	"os"
-	"path"
 
 	"github.com/elastic/go-txfile"
 	"github.com/elastic/go-txfile/internal/cleanup"
+	"github.com/elastic/go-txfile/internal/vfs/osfs/osfstest"
 )
 
 // TestFile wraps a txfile.File structure for testing.
@@ -77,15 +76,5 @@ func (f *TestFile) Open() {
 // SetupPath creates a temporary directory for testing.
 // Use the teardown function to remove the directory again.
 func SetupPath(t testT, file string) (dir string, teardown func()) {
-	dir, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if file == "" {
-		file = "test.dat"
-	}
-	return path.Join(dir, file), func() {
-		os.RemoveAll(dir)
-	}
+	return osfstest.SetupPath(t, file)
 }

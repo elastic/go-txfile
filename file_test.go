@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/elastic/go-txfile/internal/cleanup"
+	"github.com/elastic/go-txfile/internal/vfs/osfs/osfstest"
 )
 
 type testFile struct {
@@ -584,6 +585,10 @@ func TestTxFile(t *testing.T) {
 		f.writeAt(id, sampleContents[2])
 		assert.Equal(sampleContents[2], f.read(id))
 	})
+}
+
+func setupPath(assert *assertions, file string) (string, func()) {
+	return osfstest.SetupPath(assert, file)
 }
 
 func setupTestFile(assert *assertions, opts Options) (*testFile, func()) {

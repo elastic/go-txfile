@@ -65,6 +65,7 @@ func TestTxFile(t *testing.T) {
 		path, teardown := setupPath(assert, "")
 		defer teardown()
 
+		assert.Log("create and close file")
 		f, err := Open(path, os.ModePerm, Options{
 			MaxSize:  10 * 1 << 20, // 10MB
 			PageSize: 4096,
@@ -74,6 +75,7 @@ func TestTxFile(t *testing.T) {
 
 		// check if we can re-open the file:
 
+		assert.Log("open and close existing file")
 		f, err = Open(path, os.ModePerm, Options{})
 		assert.FatalOnError(err)
 		assert.NoError(f.Close())

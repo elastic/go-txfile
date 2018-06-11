@@ -68,7 +68,7 @@ func (f *TestFile) Open() {
 
 	tmp, err := txfile.Open(f.Path, os.ModePerm, f.opts)
 	if err != nil {
-		f.t.Fatal("reopen failed")
+		f.t.Fatal("open failed:", err)
 	}
 	f.File = tmp
 }

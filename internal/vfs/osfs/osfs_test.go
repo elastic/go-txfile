@@ -1,6 +1,7 @@
 package osfs
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -40,33 +41,65 @@ func TestOSFileSupport(testing *testing.T) {
 		t.Equal(10, int(sz))
 	})
 
-	t.Run("lock/unlock succeed", func(t *mint.T) {
-		file, teardown := setupFile(t, "")
-		defer teardown()
+	t.Run("lock and unlock succeed", func(t *mint.T) {
+		for _, blocking := range [2]bool{false, true} {
+			blocking := blocking
+			t.Run(fmt.Sprintf("blocking: %v", blocking), func(t *mint.T) {
+				file, teardown := setupFile(t, "")
+				defer teardown()
 
-		err := file.Lock(true, false)
-		t.NoError(err)
+				err := file.Lock(true, blocking)
+				t.NoError(err)
 
-		err = file.Unlock()
-		t.NoError(err)
+				err = file.Unlock()
+				t.NoError(err)
+			})
+		}
+	})
+
+	t.Run("lock suceeds twice", func(t *mint.T) {
+		for _, blocking := range [2]bool{false, true} {
+			blocking := blocking
+			t.Run(fmt.Sprintf("blocking: %v", blocking), func(t *mint.T) {
+				file, teardown := setupFile(t, "")
+				defer teardown()
+
+				err := file.Lock(true, blocking)
+				t.NoError(err)
+
+				err = file.Unlock()
+				t.NoError(err)
+
+				err = file.Lock(true, blocking)
+				t.NoError(err)
+
+				err = file.Unlock()
+				t.NoError(err)
+			})
+		}
 	})
 
 	t.Run("locking locked file fails", func(t *mint.T) {
-		f1, teardown := setupFile(t, "")
-		defer teardown()
+		for _, blocking := range [2]bool{false, true} {
+			blocking := blocking
+			t.Run(fmt.Sprintf("blocking: %v", blocking), func(t *mint.T) {
+				f1, teardown := setupFile(t, "")
+				defer teardown()
 
-		f2, err := Open(f1.Name(), os.ModePerm)
-		t.FatalOnError(err)
-		defer f2.Close()
+				f2, err := Open(f1.Name(), os.ModePerm)
+				t.FatalOnError(err)
+				defer f2.Close()
 
-		err = f1.Lock(true, false)
-		t.NoError(err)
+				err = f1.Lock(true, false)
+				t.NoError(err)
 
-		err = f2.Lock(true, false)
-		t.Error(err)
+				err = f2.Lock(true, false)
+				t.Error(err)
 
-		err = f1.Unlock()
-		t.NoError(err)
+				err = f1.Unlock()
+				t.NoError(err)
+			})
+		}
 	})
 
 	t.Run("mmap file", func(t *mint.T) {

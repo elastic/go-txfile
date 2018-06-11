@@ -34,6 +34,7 @@ type writeMsg struct {
 type syncMsg struct {
 	sync  *txWriteSync
 	count int // number of pages to process, before fsyncing
+	flags syncFlag
 }
 
 type txWriteSync struct {
@@ -45,6 +46,32 @@ type writable interface {
 	io.WriterAt
 	Sync(vfs.SyncFlag) error
 }
+
+// command as is consumer by the writers run loop
+type command struct {
+	n         int          // number of buffered write message to be consumed
+	fsync     *txWriteSync // set if fsync is to be executed after writing all messages
+	syncFlags syncFlag     // additional fsync flags
+}
+
+type syncFlag uint8
+
+const (
+	// On IO error, the writer will ignore any write/sync attempts, but return
+	// the first error encountered.
+	// Passing the syncResetErr notifies the writer that the current transaction
+	// is about to fail and all subsequent writes will belong to a new
+	// transaction. So to not stall any writes/operations forever, the writer
+	// will attempt write/sync any future requests, by resetting the internal
+	// error state to 'no error'.
+	syncResetErr syncFlag = 1 << iota
+
+	// syncDataOnly tells the writer that we don't care about metadata updates like
+	// access/modification timestamps (given the file size didn't change).
+	// Some filesystems profit from data only syncs, as meta data or journals
+	// don't need to be flushed, reducing the overall amount of on disk IO ops.
+	syncDataOnly
+)
 
 func (w *writer) Init(target writable, pageSize uint) {
 	w.target = target
@@ -77,7 +104,7 @@ func (w *writer) Schedule(sync *txWriteSync, id PageID, buf []byte) {
 	w.cond.Signal()
 }
 
-func (w *writer) Sync(sync *txWriteSync) {
+func (w *writer) Sync(sync *txWriteSync, flags syncFlag) {
 	sync.Retain()
 	traceln("schedule sync")
 
@@ -86,103 +113,71 @@ func (w *writer) Sync(sync *txWriteSync) {
 	w.fsync = append(w.fsync, syncMsg{
 		sync:  sync,
 		count: w.pending,
+		flags: flags,
 	})
 	w.pending = 0
 
 	w.cond.Signal()
 }
 
-func (w *writer) Run() error {
+func (w *writer) Run() (bool, error) {
 	var (
-		buf   [1024]writeMsg
-		n     int
-		err   error
-		fsync *txWriteSync
-		done  bool
+		err  error
+		done bool
+		cmd  command
+		buf  [1024]writeMsg
 	)
 
-	traceln("start async writer")
-	defer traceln("stop async writer")
-
 	for {
-		n, fsync, done = w.nextCommand(buf[:])
+		cmd, done = w.nextCommand(buf[:])
 		if done {
-			break
+			return done, nil
 		}
 
-		traceln("writer message: ", n, fsync != nil, done)
+		traceln("writer message: ", cmd.n, cmd.fsync != nil, done)
 
-		// TODO: use vector IO if possible
-		msgs := buf[:n]
+		// TODO: use vector IO if possible (linux: pwritev)
+		msgs := buf[:cmd.n]
 		sort.Slice(msgs, func(i, j int) bool {
 			return msgs[i].id < msgs[j].id
 		})
-
 		for _, msg := range msgs {
-			if err != nil {
-				traceln("done error")
-
-				msg.sync.err = err
-				msg.sync.wg.Done()
-				continue
-			}
-
-			off := uint64(msg.id) * uint64(w.pageSize)
-			tracef("write at(id=%v, off=%v, len=%v)\n", msg.id, off, len(msg.buf))
-
-			err = writeAt(w.target, msg.buf, int64(off))
-			if err != nil {
-				msg.sync.err = err
-			}
-
-			traceln("done send")
-			msg.sync.Release()
-		}
-
-		if fsync != nil {
 			if err == nil {
-				if err = w.target.Sync(vfs.SyncAll); err != nil {
-					fsync.err = err
-				}
+				// execute actual write on the page it's file offset:
+				off := uint64(msg.id) * uint64(w.pageSize)
+				tracef("write at(id=%v, off=%v, len=%v)\n", msg.id, off, len(msg.buf))
+
+				err = writeAt(w.target, msg.buf, int64(off))
 			}
 
-			traceln("done fsync")
-			fsync.Release()
-		}
-
-		if err != nil {
-			break
-		}
-	}
-
-	if done {
-		return err
-	}
-
-	// file still active, but we're facing errors -> stop writing and propagate
-	// last error to all transactions.
-	for {
-		n, fsync, done = w.nextCommand(buf[:])
-		if done {
-			break
-		}
-
-		traceln("ignoring writer message: ", n, fsync != nil, done)
-
-		for _, msg := range buf[:n] {
 			msg.sync.err = err
 			msg.sync.Release()
 		}
-		if fsync != nil {
+
+		// execute pending fsync:
+		if fsync := cmd.fsync; fsync != nil {
+			resetErr := cmd.syncFlags.Test(syncResetErr)
+			if err == nil {
+				syncFlag := vfs.SyncAll
+				if cmd.syncFlags.Test(syncDataOnly) {
+					syncFlag = vfs.SyncDataOnly
+				}
+
+				err = w.target.Sync(syncFlag)
+			}
 			fsync.err = err
+
+			traceln("done fsync")
 			fsync.Release()
+
+			if resetErr {
+				err = nil
+			}
 		}
 	}
-
-	return err
 }
 
-func (w *writer) nextCommand(buf []writeMsg) (int, *txWriteSync, bool) {
+func (w *writer) nextCommand(buf []writeMsg) (command, bool) {
 	w.mux.Lock()
 	defer w.mux.Unlock()
 
@@ -191,7 +186,7 @@ func (w *writer) nextCommand(buf []writeMsg) (int, *txWriteSync, bool) {
 
 	for {
 		if w.done {
-			return 0, nil, true
+			return command{}, true
 		}
 
 		max := len(w.scheduled)
@@ -206,6 +201,7 @@ func (w *writer) nextCommand(buf []writeMsg) (int, *txWriteSync, bool) {
 
 		// Check if we need to fsync and adjust `max` number of pages of required.
 		var sync *txWriteSync
+		var syncFlags syncFlag
 		traceln("check fsync: ", len(w.fsync))
 
 		if len(w.fsync) > 0 {
@@ -216,7 +212,7 @@ func (w *writer) nextCommand(buf []writeMsg) (int, *txWriteSync, bool) {
 			traceln("outstanding:", outstanding)
 
 			if outstanding <= max { // -> fsync
-				max, sync = outstanding, msg.sync
+				max, sync, syncFlags = outstanding, msg.sync, msg.flags
 
 				// advance fsync state
 				w.fsync[0] = syncMsg{} // clear entry, so to potentially clean references from w.fsync0
@@ -244,7 +240,7 @@ func (w *writer) nextCommand(buf []writeMsg) (int, *txWriteSync, bool) {
 			w.published = 0
 		}
 
-		return n, sync, false
+		return command{n: n, fsync: sync, syncFlags: syncFlags}, false
 	}
 }
 
@@ -276,4 +272,8 @@ func writeAt(out io.WriterAt, buf []byte, off int64) error {
 		buf = buf[n:]
 	}
 	return nil
+}
+
+func (f syncFlag) Test(other syncFlag) bool {
+	return (f & other) == other
 }

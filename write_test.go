@@ -59,7 +59,7 @@ func TestFileWriter(t *testing.T) {
 		var tmp [10]byte
 		sync := newTxWriteSync()
 		w.Schedule(sync, 0, tmp[:])
-		w.Sync(sync)
+		w.Sync(sync, 0)
 
 		if !assert.NoError(waitFn(1*time.Second, sync.Wait)) {
 			assert.FailNow("invalid writer state")
@@ -86,13 +86,13 @@ func TestFileWriter(t *testing.T) {
 		sync := newTxWriteSync()
 		w.Schedule(sync, 0, tmp[:])
 		w.Schedule(sync, 1, tmp[:])
-		w.Sync(sync)
+		w.Sync(sync, 0)
 		w.Schedule(sync, 2, tmp[:])
 		w.Schedule(sync, 3, tmp[:])
 		w.Schedule(sync, 4, tmp[:])
-		w.Sync(sync)
+		w.Sync(sync, 0)
 		w.Schedule(sync, 5, tmp[:])
-		w.Sync(sync)
+		w.Sync(sync, 0)
 
 		// unblock writer, so scheduled write commands will be executed
 		b.Unblock()
@@ -129,11 +129,11 @@ func TestFileWriter(t *testing.T) {
 
 		var tmp [10]byte
 		sync := newTxWriteSync()
-		w.Sync(sync) // start with sync, to guarantee writer is really blocked
+		w.Sync(sync, 0) // start with sync, to guarantee writer is really blocked
 		w.Schedule(sync, 3, tmp[:])
 		w.Schedule(sync, 2, tmp[:])
 		w.Schedule(sync, 1, tmp[:])
-		w.Sync(sync)
+		w.Sync(sync, 0)
 
 		// unblock writer, so scheduled write commands will be executed
 		b.Unblock()
@@ -170,9 +170,9 @@ func TestFileWriter(t *testing.T) {
 		var tmp [10]byte
 		sync := newTxWriteSync()
 		w.Schedule(sync, 1, tmp[:])
-		w.Sync(sync)
+		w.Sync(sync, 0)
 		w.Schedule(sync, 2, tmp[:])
-		w.Sync(sync)
+		w.Sync(sync, 0)
 
 		err := waitFn(1*time.Second, sync.Wait)
 		if expectedErr != err {
@@ -206,10 +206,10 @@ func TestFileWriter(t *testing.T) {
 		sync := newTxWriteSync()
 		w.Schedule(sync, 1, tmp[:])
 		w.Schedule(sync, 2, tmp[:])
-		w.Sync(sync)
+		w.Sync(sync, 0)
 		w.Schedule(sync, 3, tmp[:])
 		w.Schedule(sync, 4, tmp[:])
-		w.Sync(sync)
+		w.Sync(sync, 0)
 
 		err := waitFn(5*time.Second, sync.Wait)
 		assert.Error(err)

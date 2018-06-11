@@ -323,7 +323,16 @@ func (tx *Tx) tryCommitChanges() error {
 
 	// On function exit wait on writer to finish outstanding operations, in case
 	// we have to return early on error. On success, this is basically a no-op.
-	defer tx.writeSync.Wait()
+	txWriteComplete := false
+	defer cleanup.IfNot(&txWriteComplete, func() {
+		err := tx.writeSync.Wait()
+
+		// if wait fails, enforce an fsync with error reset flag.
+		if err != nil {
+			tx.file.writer.Sync(tx.writeSync, syncDataOnly|syncResetErr)
+			tx.writeSync.Wait()
+		}
+	})
 
 	// Flush pages.
 	if err := tx.Flush(); err != nil {
@@ -361,7 +370,7 @@ func (tx *Tx) tryCommitChanges() error {
 	}
 
 	// 4. sync all new contents and metadata before updating the ondisk meta page.
-	tx.file.writer.Sync(tx.writeSync)
+	tx.file.writer.Sync(tx.writeSync, syncDataOnly)
 
 	// 5. finalize on-disk transaction by writing new meta page.
 	tx.file.wal.fileCommitMeta(newMeta, &csWAL)
@@ -370,7 +379,9 @@ func (tx *Tx) tryCommitChanges() error {
 
 	// 6. wait for all pages beeing written and synced,
 	//    before updating in memory state.
-	if err := tx.writeSync.Wait(); err != nil {
+	err = tx.writeSync.Wait()
+	txWriteComplete = true
+	if err != nil {
 		return err
 	}
 
@@ -430,7 +441,7 @@ func (tx *Tx) syncNewMeta(buf *metaBuf) int {
 
 	metaID := 1 - tx.file.metaActive
 	tx.file.writer.Schedule(tx.writeSync, PageID(metaID), (*buf)[:])
-	tx.file.writer.Sync(tx.writeSync)
+	tx.file.writer.Sync(tx.writeSync, syncDataOnly|syncResetErr)
 	return metaID
 }
 

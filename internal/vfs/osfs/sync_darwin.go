@@ -6,9 +6,7 @@ import (
 	"github.com/elastic/go-txfile/internal/vfs"
 )
 
-type syncState struct {
-	noFullSync bool
-}
+type syncState struct{}
 
 // Sync uses fnctl or fsync in order to flush the file buffers to disk.
 // According to the darwin fsync man page[1], usage of sync is not safe. On
@@ -22,42 +20,37 @@ type syncState struct {
 // [1]: https://www.unix.com/man-page/osx/2/fsync
 // [2]: https://www.unix.com/man-page/osx/2/fcntl
 func (f *File) Sync(flags vfs.SyncFlag) error {
-	if f.state.sync.noFullSync {
-		return f.syncWithFSync()
-	}
-	return f.syncWithFcntl()
-}
-
-func (f *File) syncWithFcntl() error {
 	for {
 		_, err := unix.FcntlInt(f.File.Fd(), unix.F_FULLFSYNC, 0)
 		err = normalizeSysError(err)
-		if err == nil {
-			return nil
-		}
-
-		switch err {
-		// try again
-		case unix.EINTR:
-		case unix.EAGAIN:
-
-		// fallback to fsync?
-		// XXX: always fallback to fsync in future calls?
-		case unix.EINVAL:
-			f.state.sync.noFullSync = true
-			return f.syncWithFSync()
-
-		default:
+		if err == nil || isIOError(err) {
 			return err
 		}
+
+		if isRetryErr(err) {
+			continue
+		}
+
+		// XXX: shall we 'guard' the second fsync via ENOTTY, EINVAL, ENXIO ?
+		//      Question: What happens to the error status when calling fsync,
+		//                if F_FULLFSYNC did actually fail due to an IO error, not
+		//                captured by isIOError?
+		err = f.File.Sync()
+		if isRetryErr(err) {
+			continue
+		}
+		return err
 	}
 }
 
-func (f *File) syncWithFSync() error {
-	for {
-		err := f.File.Sync()
-		if err != unix.EINTR && err != unix.EAGAIN {
-			return err
-		}
-	}
+func isIOError(err error) bool {
+	return err == unix.EIO ||
+		// space/quota
+		err == unix.ENOSPC || err == unix.EDQUOT || err == unix.EFBIG ||
+		// network
+		err == unix.ECONNRESET || err == unix.ENETDOWN || err == unix.ENETUNREACH
+}
+
+func isRetryErr(err error) bool {
+	return err == unix.EINTR || err == unix.EAGAIN
 }

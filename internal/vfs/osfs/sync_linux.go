@@ -19,9 +19,9 @@ type syncState struct {
 // Error handling was somewhat improved in 4.13 [2][3], such that errors will
 // actually be reported on fsync (more improvements have been added to 4.16).
 //
-// [1]: https://lwn.net/Articles/718734//
-// [2]: https://lwn.net/Articles/724307/
-// [3]: https://lwn.net/Articles/724232/
+// [1]: https://lwn.net/Articles/718734
+// [2]: https://lwn.net/Articles/724307
+// [3]: https://lwn.net/Articles/724232
 func (f *File) Sync(flags vfs.SyncFlag) error {
 	dataOnly := (flags & vfs.SyncDataOnly) != 0
 	for {

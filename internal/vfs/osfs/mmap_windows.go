@@ -13,8 +13,8 @@ type mmapState struct {
 }
 
 func (f *File) MMap(sz int) ([]byte, error) {
-	szhi, szlo := uint32(sz>>32), uint32(sz)
-	hdl, err := windows.CreateFileMapping(windows.Handle(f.Fd()), nil, windows.PAGE_READONLY, szhi, szlo, nil)
+	szHi, szLo := uint32(sz>>32), uint32(sz)
+	hdl, err := windows.CreateFileMapping(windows.Handle(f.Fd()), nil, windows.PAGE_READONLY, szHi, szLo, nil)
 	if hdl == 0 {
 		return nil, os.NewSyscallError("CreateFileMapping", err)
 	}

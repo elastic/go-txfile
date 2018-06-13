@@ -24,7 +24,7 @@ func (f *File) Lock(exclusive, blocking bool) error {
 	lock := flock.NewFlock(f.Name() + lockExt)
 	if blocking {
 		err = lock.Lock()
-		ok = err != nil
+		ok = err == nil
 	} else {
 		ok, err = lock.TryLock()
 	}
@@ -49,6 +49,5 @@ func (f *File) Unlock() error {
 	if err == nil {
 		f.state.lock.Flock = nil
 	}
-
 	return err
 }

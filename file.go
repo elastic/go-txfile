@@ -246,12 +246,16 @@ func (f *File) Close() error {
 	f.munmap()
 	f.writer.Stop()
 
-	err := f.file.Close()
+	errUnlock := f.file.Unlock()
+	errClose := f.file.Close()
 
 	// wait for workers to stop
 	f.wg.Wait()
 
-	return err
+	if errUnlock != nil {
+		return errUnlock
+	}
+	return errClose
 }
 
 // Begin creates a new read-write transaction. The transaction returned
@@ -328,7 +332,7 @@ func (f *File) mmap() error {
 		maxSize = em * f.allocator.pageSize
 	}
 	pageSize := f.allocator.pageSize
-	sz, err := computeMmapSize(uint(fileSize), maxSize, uint(pageSize))
+	sz, err := computePlatformMmapSize(uint(fileSize), maxSize, uint(pageSize))
 	if err != nil {
 		return err
 	}

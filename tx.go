@@ -551,7 +551,10 @@ func (tx *Tx) rollbackChanges() error {
 	if uint(sz) > uint(truncateSz) {
 		// ignore truncate error, as truncating a memory mapped file might not be
 		// supported by all OSes/filesystems.
-		tx.file.file.Truncate(int64(truncateSz))
+		err := tx.file.file.Truncate(int64(truncateSz))
+		if err != nil {
+			traceln("rollback file truncate failed with:", err)
+		}
 	}
 
 	return nil

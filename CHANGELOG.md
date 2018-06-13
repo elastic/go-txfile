@@ -11,6 +11,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - Add support to pre-allocate the meta area. PR #7
 
 ### Changed
+- Refine platform dependent file syncing. PR #10
 
 ### Deprecated
 

@@ -4,6 +4,8 @@ package osfs
 
 import "golang.org/x/sys/unix"
 
+type lockState struct{}
+
 func (f *File) Lock(exclusive, blocking bool) error {
 	flags := unix.LOCK_SH
 	if exclusive {

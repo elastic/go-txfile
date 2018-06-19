@@ -120,6 +120,11 @@ func (r region) EachPage(fn func(PageID)) {
 	}
 }
 
+func (l region) PageIDs() (ids idList) {
+	l.EachPage(ids.Add)
+	return
+}
+
 func (r region) Before(other region) bool {
 	return r.id < other.id
 }

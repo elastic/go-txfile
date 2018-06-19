@@ -99,9 +99,12 @@ type allocCommitState struct {
 	tx            *txAllocState
 	updated       bool       // set if updates to allocator within current transaction
 	allocRegions  regionList // meta pages allocated to write new freelist too
+	dataEndMarker PageID     // new data area end marker after cleaning the data free list
+	metaEndMarker PageID     // new meta area end marker after cleaning the data free list
 	metaList      regionList // new meta area freelist
 	dataList      regionList // new data area freelist
-	overflowFreed uint       // number of pages in overflow region to be returned
+	dataFreed     uint       // number of pages in the data region removed from the free list
+	overflowFreed uint       // number of pages in overflow region removed from the free list
 }
 
 // noLimit indicates the data/meta-area can grow without any limits.
@@ -136,9 +139,9 @@ func (a *allocator) makeTxAllocState(withOverflow bool, growPercentage int) txAl
 	}
 }
 
-func (a *allocator) fileCommitPrepare(st *allocCommitState, tx *txAllocState) {
+func (a *allocator) fileCommitPrepare(st *allocCommitState, tx *txAllocState, forceUpdate bool) {
 	st.tx = tx
-	st.updated = tx.Updated()
+	st.updated = forceUpdate || tx.Updated()
 	if st.updated {
 		a.MetaAllocator().FreeRegions(tx, a.freelistPages)
 	}
@@ -187,10 +190,34 @@ func (a *allocator) fileCommitAlloc(st *allocCommitState) error {
 	newMetaList := mergeRegionLists(a.meta.freelist.regions, metaFreed)
 
 	st.allocRegions = allocRegions
-	st.dataList = newDataList
 
-	// remove pages from end of overflow area from meta freelist + adjust end marker
-	st.metaList, st.overflowFreed = releaseOverflowPages(newMetaList, a.maxPages, a.meta.endMarker)
+	dataEndMarker := a.data.endMarker
+	metaEndMarker := a.meta.endMarker
+
+	// Remove pages from end of overflow area from meta freelist + adjust end marker
+	st.metaList, st.overflowFreed = releaseOverflowPages(newMetaList, a.maxPages, metaEndMarker)
+	if st.overflowFreed > 0 {
+		newEnd := metaEndMarker - PageID(st.overflowFreed)
+		if metaEndMarker > dataEndMarker { // shrink overflow area, which was allocated from data area
+			dataEndMarker = newEnd
+		}
+		metaEndMarker = newEnd
+	}
+
+	// Remove pages from end of data area. Pages are removed from the data area
+	// only if the file size has been decreased.
+	st.dataList, st.dataFreed = releaseOverflowPages(newDataList, a.maxPages, dataEndMarker)
+	if st.dataFreed > 0 {
+		dataEndMarker -= PageID(st.dataFreed)
+		if metaEndMarker >= dataEndMarker {
+			metaEndMarker = dataEndMarker
+		}
+	}
+
+	// Update new allocator end markers if regions have been removed from the free lists.
+	st.dataEndMarker = dataEndMarker
+	st.metaEndMarker = metaEndMarker
+
 	return nil
 }
 
@@ -226,6 +253,9 @@ func releaseOverflowPages(
 		}
 	}
 
+	if len(list) == 0 {
+		list = nil
+	}
 	return list, freed
 }
 
@@ -247,17 +277,8 @@ func (a *allocator) fileCommitMeta(meta *metaPage, st *allocCommitState) {
 		}
 		meta.freelist.Set(freelistRoot)
 
-		dataEndMarker := a.data.endMarker
-		metaEndMarker := a.meta.endMarker
-		if st.overflowFreed > 0 {
-			metaEndMarker -= PageID(st.overflowFreed)
-			if metaEndMarker > dataEndMarker {
-				dataEndMarker = metaEndMarker
-			}
-		}
-
-		meta.dataEndMarker.Set(dataEndMarker)
-		meta.metaEndMarker.Set(metaEndMarker)
+		meta.dataEndMarker.Set(st.dataEndMarker)
+		meta.metaEndMarker.Set(st.metaEndMarker)
 		meta.metaTotal.Set(uint64(a.metaTotal - st.overflowFreed))
 	}
 }
@@ -271,8 +292,8 @@ func (a *allocator) Commit(st *allocCommitState) {
 			a.freelistRoot = 0
 		}
 
-		a.data.commit(st.dataList)
-		a.meta.commit(st.metaList)
+		a.data.commit(st.dataEndMarker, st.dataList)
+		a.meta.commit(st.metaEndMarker, st.metaList)
 		a.metaTotal -= st.overflowFreed
 	}
 }
@@ -293,7 +314,8 @@ func (a *allocator) Rollback(st *txAllocState) {
 	a.data.rollback(&st.data)
 }
 
-func (a *allocArea) commit(regions regionList) {
+func (a *allocArea) commit(endMarker PageID, regions regionList) {
+	a.endMarker = endMarker
 	a.freelist.regions = regions
 	a.freelist.avail = regions.CountPages()
 }
@@ -473,7 +495,12 @@ func (a *dataAllocator) Avail(_ *txAllocState) uint {
 	if a.maxPages == 0 {
 		return noLimit
 	}
-	return a.maxPages - uint(a.data.endMarker) + a.data.freelist.Avail()
+
+	avail := a.data.freelist.Avail()
+	if end := uint(a.data.endMarker); end < a.maxPages {
+		avail += a.maxPages - end
+	}
+	return avail
 }
 
 func (a *dataAllocator) AllocContinuousRegion(

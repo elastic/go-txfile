@@ -9,6 +9,21 @@ func (s *pageSet) Add(id PageID) {
 	(*s)[id] = struct{}{}
 }
 
+func (s *pageSet) AddSet(other pageSet) {
+	if *s == nil {
+		*s = pageSet{}
+	}
+	for id := range other {
+		(*s)[id] = struct{}{}
+	}
+}
+
+func (s pageSet) Remove(id PageID) {
+	if s != nil {
+		delete(s, id)
+	}
+}
+
 func (s pageSet) Has(id PageID) bool {
 	if s != nil {
 		_, exists := s[id]

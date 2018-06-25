@@ -23,6 +23,7 @@ import (
 
 	"github.com/elastic/go-txfile/internal/invariant"
 	"github.com/elastic/go-txfile/internal/iter"
+	"github.com/elastic/go-txfile/txerr"
 )
 
 // freelist manages freed pages within an area. The freelist uses
@@ -392,14 +393,17 @@ func readFreeList(
 	access func(PageID) []byte,
 	root PageID,
 	fn func(bool, region),
-) (idList, error) {
+) (idList, reason) {
+	const op = "txfile/read-freelist"
+
 	if root == 0 {
 		return nil, nil
 	}
 
 	rootPage := access(root)
 	if rootPage == nil {
-		return nil, errOutOfBounds
+		return nil, txerr.Op(op).Of(InvalidPageID).Msgf(
+			"root page %v not in bounds", root)
 	}
 
 	var metaPages idList
@@ -407,7 +411,8 @@ func readFreeList(
 		metaPages.Add(pageID)
 		node, payload := castFreePage(access(pageID))
 		if node == nil {
-			return nil, errOutOfBounds
+			return nil, txerr.Op(op).Of(InvalidPageID).Msgf(
+				"freelist node page %v not in bounds", pageID)
 		}
 
 		pageID = node.next.Get()

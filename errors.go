@@ -17,8 +17,66 @@
 
 package txfile
 
-import "errors"
+import (
+	"errors"
 
+	"github.com/elastic/go-txfile/internal/vfs"
+	"github.com/elastic/go-txfile/txerr"
+)
+
+type reason interface {
+	txerr.ErrorBuild
+}
+
+type ErrKind int
+
+// txfile internal error kinds
+var (
+// InvalidConfig = txerr.NewKind("configuration error")
+)
+
+// file system error kinds (map internal/vfs errors)
+const (
+	PermissionError       = vfs.ErrPermissions
+	FileExists            = vfs.ErrExist
+	FileDoesNotExist      = vfs.ErrNotExist
+	FileClosed            = vfs.ErrClosed
+	NoDiskSpace           = vfs.ErrNoSpace
+	FDLimit               = vfs.ErrFDLimit
+	CantResolvePath       = vfs.ErrResolvePath
+	IOError               = vfs.ErrIO
+	OSOtherError          = vfs.ErrOSOther
+	OperationNotSupported = vfs.ErrNotSupported
+	LockFailed            = vfs.ErrLockFailed
+)
+
+// internal txfile error kinds
+const (
+	InvalidConfig ErrKind = iota
+	InvalidParam
+	InvalidFileSize
+	InvalidPageID
+	FileCreationFailed
+	TxFailed
+)
+
+var kindStr = [...]string{
+	"configuration error",
+	"invalid parameter",
+	"invalid file size",
+	"page id out of bounds",
+	"can not create file",
+	"transaction failed",
+}
+
+func (k ErrKind) Error() string {
+	if k > 0 && int(k) < len(kindStr) {
+		return kindStr[k]
+	}
+	return "unknown error kind"
+}
+
+// TODO: obsolete errors:
 var (
 	// settings errors
 	errReadOnlyUpdateSize = errors.New("can not update the file size in read only mode")
@@ -31,9 +89,9 @@ var (
 
 	// file sizing errors
 
-	errMmapTooLarge    = errors.New("mmap too large")
+	// errMmapTooLarge    = errors.New("mmap too large")
 	errFileSizeTooLage = errors.New("max file size to large for this system")
-	errInvalidFileSize = errors.New("invalid file size")
+	// errInvalidFileSize = errors.New("invalid file size")
 
 	// page access/allocation errors
 

@@ -19,14 +19,19 @@
 
 package osfs
 
-import "golang.org/x/sys/unix"
+import (
+	"golang.org/x/sys/unix"
+)
 
 type mmapState struct{}
 
 func (f *File) MMap(sz int) ([]byte, error) {
-	return unix.Mmap(int(f.Fd()), 0, int(sz), unix.PROT_READ, unix.MAP_SHARED)
+	b, err := unix.Mmap(int(f.Fd()), 0, int(sz), unix.PROT_READ, unix.MAP_SHARED)
+	return b, f.wrapErr("file/mmap", err)
+
 }
 
 func (f *File) MUnmap(b []byte) error {
-	return unix.Munmap(b)
+	err := unix.Munmap(b)
+	return f.wrapErr("file/mmap", err)
 }

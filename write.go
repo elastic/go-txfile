@@ -273,6 +273,7 @@ func (s *txWriteSync) Release() {
 	s.wg.Done()
 }
 
+// TODO: s/error/reason
 func (s *txWriteSync) Wait() error {
 	s.wg.Wait()
 	return s.err

@@ -188,7 +188,7 @@ func readWALMapping(
 	wal *waLog,
 	access func(PageID) []byte,
 	root PageID,
-) error {
+) reason {
 	mapping, ids, err := readWAL(access, root)
 	if err != nil {
 		return nil

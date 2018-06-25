@@ -44,7 +44,7 @@ func (f *File) Sync(flags vfs.SyncFlag) error {
 	for {
 		err := f.doSync(!f.state.sync.noDataOnly && dataOnly)
 		if err == nil || (err != unix.EINTR && err != unix.EAGAIN) {
-			return err
+			return f.wrapErr("file/sync", err)
 		}
 	}
 }

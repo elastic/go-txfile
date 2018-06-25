@@ -164,6 +164,7 @@ func (a *allocator) fileCommitPrepare(st *allocCommitState, tx *txAllocState, fo
 	}
 }
 
+// TODO: s/error/reason
 func (a *allocator) fileCommitAlloc(st *allocCommitState) error {
 	if !st.updated {
 		return nil
@@ -276,6 +277,7 @@ func releaseOverflowPages(
 	return list, freed
 }
 
+// TODO: s/error/reason
 func (a *allocator) fileCommitSerialize(
 	st *allocCommitState,
 	onPage func(id PageID, buf []byte) error,
@@ -400,12 +402,9 @@ func (mm *metaManager) Ensure(st *txAllocState, n uint) bool {
 	// Can not grow until 'requiredMax' -> try to grow up to requiredMin,
 	// potentially allocating pages from the overflow area
 	requiredMin := szMinMeta - total
-	if mm.tryGrow(st, requiredMin, st.options.overflowAreaEnabled) {
-		return true
-	}
 
-	// out of memory
-	return false
+	// returns false if we are out of memory
+	return mm.tryGrow(st, requiredMin, st.options.overflowAreaEnabled)
 }
 
 func (mm *metaManager) tryGrow(
@@ -713,7 +712,7 @@ func (s *txAllocArea) Updated() bool {
 // allocator state (de-)serialization
 // ----------------------------------
 
-func readAllocatorState(a *allocator, f *File, meta *metaPage, opts Options) error {
+func readAllocatorState(a *allocator, f *File, meta *metaPage, opts Options) reason {
 	if a.maxSize > 0 {
 		a.maxPages = a.maxSize / a.pageSize
 	}

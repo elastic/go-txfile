@@ -67,7 +67,7 @@ func (e *Error) Error() string {
 	if buf.Len() == 0 {
 		return "no error"
 	}
-	return ""
+	return buf.String()
 }
 
 func pad(b *strings.Builder, p string) {

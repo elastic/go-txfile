@@ -697,7 +697,7 @@ func initTxReleaseRegions(f *File) {
 		if err := tx.file.allocator.fileCommitSerialize(&csAlloc, tx.scheduleWrite); err != nil {
 			return err
 		}
-		tx.file.writer.Sync(tx.writeSync)
+		tx.file.writer.Sync(tx.writeSync, syncDataOnly)
 
 		// Update file meta header.
 		newMetaBuf := tx.prepareMetaBuffer()

@@ -37,7 +37,7 @@ var (
 
 // file system error kinds (map internal/vfs errors)
 const (
-	PermissionError       = vfs.ErrPermissions
+	PermissionError       = vfs.ErrPermission
 	FileExists            = vfs.ErrExist
 	FileDoesNotExist      = vfs.ErrNotExist
 	FileClosed            = vfs.ErrClosed
@@ -51,29 +51,30 @@ const (
 )
 
 // internal txfile error kinds
+
+//go:generate stringer -type=ErrKind -linecomment=true
 const (
-	InvalidConfig ErrKind = iota
-	InvalidParam
-	InvalidFileSize
-	InvalidPageID
-	FileCreationFailed
-	TxFailed
+	InvalidConfig      ErrKind = iota // configuration error
+	InvalidParam                      // invalid parameter
+	InvalidFileSize                   // invalid file size
+	InvalidPageID                     // page id out of bounds
+	FileCreationFailed                // can not create file
+	TxFailed                          // transaction failed
+	InvalidMetaPage                   // meta page invalid
+	OutOfMemory                       // out of memory
+
+	endOfErrKind // unknown error kind
 )
 
-var kindStr = [...]string{
-	"configuration error",
-	"invalid parameter",
-	"invalid file size",
-	"page id out of bounds",
-	"can not create file",
-	"transaction failed",
-}
-
 func (k ErrKind) Error() string {
-	if k > 0 && int(k) < len(kindStr) {
-		return kindStr[k]
+	if k < endOfErrKind {
+		return k.String()
 	}
 	return "unknown error kind"
+}
+
+func raiseOutOfBounds(id PageID) *txerr.E {
+	return txerr.Of(InvalidPageID).Msgf("out of bounds page id %v", id)
 }
 
 // TODO: obsolete errors:

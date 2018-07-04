@@ -1,6 +1,25 @@
+// Licensed to Elasticsearch B.V. under one or more contributor
+// license agreements. See the NOTICE file distributed with
+// this work for additional information regarding copyright
+// ownership. Elasticsearch B.V. licenses this file to you under
+// the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 package vfs
 
-import "strings"
+import (
+	"github.com/elastic/go-txfile/internal/strbld"
+)
 
 type Error struct {
 	op   string
@@ -58,7 +77,7 @@ func (e *Error) Path() string { return e.path }
 func (e *Error) Cause() error { return e.err }
 
 func (e *Error) Error() string {
-	buf := &strings.Builder{}
+	buf := &strbld.Builder{}
 	putStr(buf, e.op)
 	putErr(buf, e.kind)
 	putStr(buf, e.path)
@@ -70,20 +89,20 @@ func (e *Error) Error() string {
 	return buf.String()
 }
 
-func pad(b *strings.Builder, p string) {
+func pad(b *strbld.Builder, p string) {
 	if b.Len() > 0 {
 		b.WriteString(p)
 	}
 }
 
-func putStr(b *strings.Builder, s string) {
+func putStr(b *strbld.Builder, s string) {
 	if s != "" {
 		pad(b, ": ")
 		b.WriteString(s)
 	}
 }
 
-func putErr(b *strings.Builder, err error) {
+func putErr(b *strbld.Builder, err error) {
 	if err != nil {
 		putStr(b, err.Error())
 	}

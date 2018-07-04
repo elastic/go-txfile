@@ -30,39 +30,27 @@ type Error struct {
 
 type Kind int
 
+//go:generate stringer -type=Kind -linecomment=true
 const (
-	ErrOSOther Kind = iota
-	ErrPermissions
-	ErrExist
-	ErrNotExist
-	ErrClosed
-	ErrNoSpace
-	ErrFDLimit
-	ErrResolvePath
-	ErrIO
-	ErrNotSupported
-	ErrLockFailed
-	ErrUnlockFailed
+	ErrOSOther      Kind = iota // unknown OS error
+	ErrPermission               // permission denied
+	ErrExist                    // file already exists
+	ErrNotExist                 // files does not exist
+	ErrClosed                   // file already closed
+	ErrNoSpace                  // no space or quota exhausted
+	ErrFDLimit                  // process file desciptor limit reached
+	ErrResolvePath              // cannot resolve path
+	ErrIO                       // read/write IO error
+	ErrNotSupported             // operation not supported
+	ErrLockFailed               // file lock failed
+	ErrUnlockFailed             // file unlock failed
+
+	endOfErrKind // unknown error kind
 )
 
-var kindStr = [...]string{
-	"",
-	"permission denied",
-	"file already exists",
-	"file does not exist",
-	"file already closed",
-	"no space or quota exhausted",
-	"process file desciptor limit reached",
-	"cannot resolve path",
-	"read/write IO error",
-	"operation not supported",
-	"file lock failed",
-	"file unlock failed",
-}
-
 func (k Kind) Error() string {
-	if k > 0 && int(k) < len(kindStr) {
-		return kindStr[k]
+	if k < endOfErrKind {
+		return k.String()
 	}
 	return "unknown"
 }

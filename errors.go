@@ -28,26 +28,6 @@ type reason interface {
 
 type ErrKind int
 
-// txfile internal error kinds
-var (
-// InvalidConfig = txerr.NewKind("configuration error")
-)
-
-// file system error kinds (map internal/vfs errors)
-const (
-	PermissionError       = vfs.ErrPermission
-	FileExists            = vfs.ErrExist
-	FileDoesNotExist      = vfs.ErrNotExist
-	FileClosed            = vfs.ErrClosed
-	NoDiskSpace           = vfs.ErrNoSpace
-	FDLimit               = vfs.ErrFDLimit
-	CantResolvePath       = vfs.ErrResolvePath
-	IOError               = vfs.ErrIO
-	OSOtherError          = vfs.ErrOSOther
-	OperationNotSupported = vfs.ErrNotSupported
-	LockFailed            = vfs.ErrLockFailed
-)
-
 // internal txfile error kinds
 
 //go:generate stringer -type=ErrKind -linecomment=true
@@ -68,6 +48,22 @@ const (
 	endOfErrKind                      // unknown error kind
 )
 
+// re-export file system error kinds (from internal/vfs)
+
+const (
+	PermissionError       = vfs.ErrPermission
+	FileExists            = vfs.ErrExist
+	FileDoesNotExist      = vfs.ErrNotExist
+	FileClosed            = vfs.ErrClosed
+	NoDiskSpace           = vfs.ErrNoSpace
+	FDLimit               = vfs.ErrFDLimit
+	CantResolvePath       = vfs.ErrResolvePath
+	IOError               = vfs.ErrIO
+	OSOtherError          = vfs.ErrOSOther
+	OperationNotSupported = vfs.ErrNotSupported
+	LockFailed            = vfs.ErrLockFailed
+)
+
 func (k ErrKind) Error() string {
 	if k > endOfErrKind {
 		k = endOfErrKind
@@ -78,38 +74,3 @@ func (k ErrKind) Error() string {
 func raiseOutOfBounds(op string, id PageID) *txerr.E {
 	return txerr.Op(op).Of(InvalidPageID).Msgf("out of bounds page id %v", id)
 }
-
-/*
-// TODO: obsolete errors:
-var (
-	// settings errors
-	errReadOnlyUpdateSize = errors.New("can not update the file size in read only mode")
-
-	// file meta page validation errors
-
-	errMagic    = errors.New("invalid magic number")
-	errVersion  = errors.New("invalid version number")
-	errChecksum = errors.New("checksum mismatch")
-
-	// file sizing errors
-
-	// errMmapTooLarge    = errors.New("mmap too large")
-	errFileSizeTooLage = errors.New("max file size to large for this system")
-	// errInvalidFileSize = errors.New("invalid file size")
-
-	// page access/allocation errors
-
-	errOutOfBounds = errors.New("out of bounds page id")
-	errOutOfMemory = errors.New("out of memory")
-	// errFreedPage     = errors.New("trying to access an already freed page")
-	errPageFlushed   = errors.New("page is already flushed")
-	errTooManyBytes  = errors.New("contents exceeds page size")
-	errNoPageData    = errors.New("accessing page without contents")
-	errFreeDirtyPage = errors.New("freeing dirty page")
-
-	// transaction errors
-
-	errTxFinished = errors.New("transaction has already been closed")
-	errTxReadonly = errors.New("readonly transaction")
-)
-*/

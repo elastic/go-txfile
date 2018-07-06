@@ -18,8 +18,6 @@
 package txfile
 
 import (
-	"errors"
-
 	"github.com/elastic/go-txfile/internal/vfs"
 	"github.com/elastic/go-txfile/txerr"
 )
@@ -54,29 +52,34 @@ const (
 
 //go:generate stringer -type=ErrKind -linecomment=true
 const (
-	InvalidConfig      ErrKind = iota // configuration error
-	InvalidParam                      // invalid parameter
-	InvalidFileSize                   // invalid file size
-	InvalidPageID                     // page id out of bounds
+	InternalError      ErrKind = iota // internal error
 	FileCreationFailed                // can not create file
-	TxFailed                          // transaction failed
+	InvalidConfig                     // configuration error
+	InvalidFileSize                   // invalid file size
 	InvalidMetaPage                   // meta page invalid
+	InvalidOp                         // invalid operation
+	InvalidPageID                     // page id out of bounds
+	InvalidParam                      // invalid parameter
 	OutOfMemory                       // out of memory
-
-	endOfErrKind // unknown error kind
+	TxCommitFail                      // transaction failed during commit
+	TxFailed                          // transaction failed
+	TxFinished                        // finished transaction
+	TxReadOnly                        // readonly transaction
+	endOfErrKind                      // unknown error kind
 )
 
 func (k ErrKind) Error() string {
-	if k < endOfErrKind {
-		return k.String()
+	if k > endOfErrKind {
+		k = endOfErrKind
 	}
-	return "unknown error kind"
+	return k.String()
 }
 
-func raiseOutOfBounds(id PageID) *txerr.E {
-	return txerr.Of(InvalidPageID).Msgf("out of bounds page id %v", id)
+func raiseOutOfBounds(op string, id PageID) *txerr.E {
+	return txerr.Op(op).Of(InvalidPageID).Msgf("out of bounds page id %v", id)
 }
 
+/*
 // TODO: obsolete errors:
 var (
 	// settings errors
@@ -96,9 +99,9 @@ var (
 
 	// page access/allocation errors
 
-	errOutOfBounds   = errors.New("out of bounds page id")
-	errOutOfMemory   = errors.New("out of memory")
-	errFreedPage     = errors.New("trying to access an already freed page")
+	errOutOfBounds = errors.New("out of bounds page id")
+	errOutOfMemory = errors.New("out of memory")
+	// errFreedPage     = errors.New("trying to access an already freed page")
 	errPageFlushed   = errors.New("page is already flushed")
 	errTooManyBytes  = errors.New("contents exceeds page size")
 	errNoPageData    = errors.New("accessing page without contents")
@@ -109,3 +112,4 @@ var (
 	errTxFinished = errors.New("transaction has already been closed")
 	errTxReadonly = errors.New("readonly transaction")
 )
+*/

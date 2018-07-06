@@ -17,7 +17,11 @@
 
 package txfile
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/elastic/go-txfile/txerr"
+)
 
 // waLog (write-ahead-log) mapping page ids to overwrite page ids in
 // the write-ahead-log.
@@ -86,7 +90,9 @@ func (l *waLog) fileCommitPrepare(st *walCommitState, tx *txWalState) {
 	st.mapping = newWal
 }
 
-func (l *waLog) fileCommitAlloc(tx *Tx, st *walCommitState) error {
+func (l *waLog) fileCommitAlloc(tx *Tx, st *walCommitState) reason {
+	const op = "txfile/commit-alloc-wal"
+
 	if !st.updated {
 		return nil
 	}
@@ -95,7 +101,8 @@ func (l *waLog) fileCommitAlloc(tx *Tx, st *walCommitState) error {
 	if pages > 0 {
 		st.allocRegions = tx.metaAllocator().AllocRegions(&tx.alloc, pages)
 		if st.allocRegions == nil {
-			return errOutOfMemory
+			return txerr.Op(op).Of(OutOfMemory).
+				Msg("not enough space to allocate write ahead meta pages")
 		}
 	}
 	return nil
@@ -104,8 +111,8 @@ func (l *waLog) fileCommitAlloc(tx *Tx, st *walCommitState) error {
 func (l *waLog) fileCommitSerialize(
 	st *walCommitState,
 	pageSize uint,
-	onPage func(id PageID, buf []byte) error,
-) error {
+	onPage func(id PageID, buf []byte) reason,
+) reason {
 	if !st.updated {
 		return nil
 	}
@@ -191,7 +198,7 @@ func readWALMapping(
 ) reason {
 	mapping, ids, err := readWAL(access, root)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	wal.mapping = mapping
@@ -202,7 +209,9 @@ func readWALMapping(
 func readWAL(
 	access func(PageID) []byte,
 	root PageID,
-) (walMapping, idList, error) {
+) (walMapping, idList, reason) {
+	const op = "txfile/read-wal"
+
 	if root == 0 {
 		return walMapping{}, nil, nil
 	}
@@ -213,7 +222,9 @@ func readWAL(
 		metaPages.Add(pageID)
 		node, data := castWalPage(access(pageID))
 		if node == nil {
-			return nil, nil, errOutOfBounds
+			return nil, nil, txerr.Op(op).Of(InvalidMetaPage).
+				CausedBy(raiseOutOfBounds(op, pageID)).
+				Msg("write ahead metadata corrupted")
 		}
 
 		count := int(node.count.Get())
@@ -237,8 +248,8 @@ func writeWAL(
 	to regionList,
 	pageSize uint,
 	mapping walMapping,
-	onPage func(id PageID, buf []byte) error,
-) error {
+	onPage func(id PageID, buf []byte) reason,
+) reason {
 	allocPages := to.PageIDs()
 	writer := newPagingWriter(allocPages, pageSize, 0, onPage)
 	for id, walID := range mapping {

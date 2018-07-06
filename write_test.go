@@ -58,6 +58,14 @@ const (
 func TestFileWriter(t *testing.T) {
 	assert := newAssertions(t)
 
+	checkCause := func(assert *assertions, expected, err error) {
+		if reason, ok := err.(reason); ok {
+			assert.Equal(expected, reason.Err().Cause())
+		} else {
+			assert.Fail("expected failure reason")
+		}
+	}
+
 	assert.Run("start stop", func(assert *assertions) {
 		var ops testIOOperations
 		_, teardown := newTestWriter(recordWriteOps(&ops), 64)
@@ -192,9 +200,7 @@ func TestFileWriter(t *testing.T) {
 		w.Sync(sync, 0)
 
 		err := waitFn(1*time.Second, sync.Wait)
-		if expectedErr != err {
-			assert.FailNow("unexpected error")
-		}
+		checkCause(assert, expectedErr, err)
 
 		// writer should stop on first error and ignore all following commands
 		expectedOps := []opType{opWriteAt, opSync}
@@ -230,7 +236,7 @@ func TestFileWriter(t *testing.T) {
 
 		err := waitFn(5*time.Second, sync.Wait)
 		assert.Error(err)
-		assert.Equal(expectedErr, err)
+		checkCause(assert, expectedErr, err)
 
 		// writer should stop on first error and ignore all following commands
 		expectedOps := []opType{opWriteAt}

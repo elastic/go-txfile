@@ -402,8 +402,9 @@ func readFreeList(
 
 	rootPage := access(root)
 	if rootPage == nil {
-		return nil, txerr.Op(op).Of(InvalidPageID).Msgf(
-			"root page %v not in bounds", root)
+		return nil, txerr.Op(op).Of(InvalidMetaPage).
+			CausedBy(raiseOutOfBounds(op, root)).
+			Msg("root page not in bounds")
 	}
 
 	var metaPages idList
@@ -411,8 +412,9 @@ func readFreeList(
 		metaPages.Add(pageID)
 		node, payload := castFreePage(access(pageID))
 		if node == nil {
-			return nil, txerr.Op(op).Of(InvalidPageID).Msgf(
-				"freelist node page %v not in bounds", pageID)
+			return nil, txerr.Op(op).Of(InvalidMetaPage).
+				CausedBy(raiseOutOfBounds(op, pageID)).
+				Msg("invalid freelist node page")
 		}
 
 		pageID = node.next.Get()
@@ -433,12 +435,12 @@ func writeFreeLists(
 	to regionList,
 	pageSize uint,
 	metaList, dataList regionList,
-	onPage func(id PageID, buf []byte) error,
-) error {
+	onPage func(id PageID, buf []byte) reason,
+) reason {
 	allocPages := to.PageIDs()
 	writer := newPagingWriter(allocPages, pageSize, 0, onPage)
 
-	var writeErr error
+	var writeErr reason
 	writeList := func(isMeta bool, lst regionList) {
 		if writeErr != nil {
 			return

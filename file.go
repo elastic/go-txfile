@@ -75,9 +75,8 @@ func Open(path string, mode os.FileMode, opts Options) (*File, error) {
 
 	file, err := osfs.Open(path, mode)
 	if err != nil {
-		return nil, txerr.Op(operation).
-			Msgf("can not open file '%v'", path).
-			CausedBy(err)
+		return nil, txerr.Op(operation).CausedBy(err).
+			Msgf("can not open file '%v'", path)
 	}
 
 	initOK := false
@@ -90,9 +89,8 @@ func Open(path string, mode os.FileMode, opts Options) (*File, error) {
 		f, err = openWith(file, opts)
 	}
 	if err != nil {
-		return nil, txerr.Op(operation).
-			Msgf("opening file '%v' failed", path).
-			CausedBy(err)
+		return nil, txerr.Op(operation).CausedBy(err).
+			Msgf("opening file '%v' failed", path)
 	}
 
 	initOK = true
@@ -104,10 +102,10 @@ func Open(path string, mode os.FileMode, opts Options) (*File, error) {
 
 // openWith implements the actual opening sequence, including file
 // initialization and validation.
-func openWith(file vfs.File, opts Options) (*File, error) {
-	sz, err := file.Size()
-	if err != nil {
-		return nil, err
+func openWith(file vfs.File, opts Options) (*File, reason) {
+	sz, ferr := file.Size()
+	if ferr != nil {
+		return nil, txerr.Wrap(ferr)
 	}
 
 	isNew := false
@@ -186,7 +184,7 @@ func newFile(
 		return nil, err
 	}
 	initOK := false
-	defer cleanup.IfNot(&initOK, cleanup.IgnoreError(f.munmap))
+	defer cleanup.IfNot(&initOK, ignoreReason(f.munmap))
 
 	if err := f.init(metaActive, opts); err != nil {
 		return nil, err
@@ -311,28 +309,33 @@ func (f *File) SplitOffset(offset uintptr) (PageID, uintptr) {
 // filesystem not properly truncating mmapped files.
 // Due to the memory mapping being updated while truncating, all file locks
 // must be held, ensuring no other transaction can read from the file.
-func (f *File) truncate(sz int64) error {
+func (f *File) truncate(sz int64) reason {
+	const op = "txfile/truncate"
+	const errMsg = "can not update file size"
+
 	isMMapped := f.mapped != nil
 
 	if isMMapped {
 		if err := f.munmap(); err != nil {
-			return err
+			return txerr.Op(op).CausedBy(err).Msg(errMsg)
 		}
 	}
 
 	if err := f.file.Truncate(sz); err != nil {
-		return err
+		return txerr.Op(op).CausedBy(err).Msg(errMsg)
 	}
 
 	if isMMapped {
-		return f.mmap()
+		if err := f.mmap(); err != nil {
+			return txerr.Op(op).CausedBy(err).Msg(errMsg)
+		}
 	}
 	return nil
 }
 
 // mmapUpdate updates the mmaped states.
 // A go-routine updating the mmaped aread, must hold all locks on the file.
-func (f *File) mmapUpdate() (err error) {
+func (f *File) mmapUpdate() (err reason) {
 	if err = f.munmap(); err == nil {
 		err = f.mmap()
 	}
@@ -346,10 +349,12 @@ func (f *File) mmap() reason {
 	// update real file size
 	fileSize, fileErr := f.file.Size()
 	if fileErr != nil {
-		return txerr.Op(op).CausedBy(fileErr).Msg("unable to determine file size for mmap region")
+		return txerr.Op(op).CausedBy(fileErr).
+			Msg("unable to determine file size for mmap region")
 	}
 	if fileSize < 0 {
-		return txerr.Op(op).Of(InvalidFileSize).Msgf("file size %v < 0", fileSize)
+		return txerr.Op(op).Of(InvalidFileSize).
+			Msgf("file size %v < 0", fileSize)
 	}
 	f.size = fileSize
 
@@ -377,10 +382,14 @@ func (f *File) mmap() reason {
 }
 
 // munmap unmaps the file and sets internal mapping to nil.
-func (f *File) munmap() error {
+func (f *File) munmap() reason {
+	const op = "txfile/munmap"
 	err := f.file.MUnmap(f.mapped)
 	f.mapped = nil
-	return err
+	if err != nil {
+		return txerr.Op(op).CausedBy(err)
+	}
+	return nil
 }
 
 // mmapedPage finds the mmaped page contents by the given pageID.
@@ -404,7 +413,9 @@ func initNewFile(file vfs.File, opts Options) reason {
 	if opts.MaxSize > 0 && opts.Prealloc {
 		flags |= metaFlagPrealloc
 		if err := file.Truncate(int64(opts.MaxSize)); err != nil {
-			return txerr.Op(op).Of(FileCreationFailed).CausedBy(err).Msg("unable to preallocate file")
+			return txerr.Op(op).Of(FileCreationFailed).
+				CausedBy(err).
+				Msg("unable to preallocate file")
 		}
 	}
 
@@ -474,24 +485,28 @@ func initNewFile(file vfs.File, opts Options) reason {
 	}
 
 	// write initial pages to disk
-	err := writeAt(file, buf[:int(pageSize)*requiredPages], 0)
+	err := writeAt(op, file, buf[:int(pageSize)*requiredPages], 0)
 	if err == nil {
-		err = file.Sync(vfs.SyncAll)
+		if syncErr := file.Sync(vfs.SyncAll); syncErr != nil {
+			err = txerr.Wrap(syncErr)
+		}
 	}
 
 	if err != nil {
-		return txerr.Op(op).Of(FileCreationFailed).CausedBy(err).Msgf("io error when initializing data file")
+		return txerr.Op(op).Of(FileCreationFailed).
+			CausedBy(err).
+			Msgf("io error while initializing data file")
 	}
 	return nil
 }
 
 // readValidMeta tries to read a valid meta page from the file.
 // The first valid meta page encountered is returned.
-func readValidMeta(f vfs.File) (metaPage, int, error) {
+func readValidMeta(f vfs.File) (metaPage, int, reason) {
 	var pages [2]metaPage
-	var metaErr [2]error
+	var metaErr [2]reason
 	var metaActive int
-	var err error
+	var err reason
 
 	pages[0], err = readMeta(f, 0)
 	if err != nil {
@@ -530,10 +545,16 @@ func readValidMeta(f vfs.File) (metaPage, int, error) {
 	return pages[metaActive], metaActive, nil
 }
 
-func readMeta(f vfs.File, off int64) (metaPage, error) {
+func readMeta(f vfs.File, off int64) (metaPage, reason) {
+	const op = "txfile/read-file-meta"
+
 	var buf [unsafe.Sizeof(metaPage{})]byte
 	_, err := f.ReadAt(buf[:], off)
-	return *castMetaPage(buf[:]), err
+	if err != nil {
+		return metaPage{}, txerr.Op(op).CausedBy(err).
+			Msgf("failed to read file header page at offset %v", off)
+	}
+	return *castMetaPage(buf[:]), nil
 }
 
 // computeMmapSize determines the page count in multiple of pages.
@@ -600,7 +621,8 @@ func (f *File) getMetaPage() *metaPage {
 func growFile(f *File, opts Options) reason {
 	err := doGrowFile(f, opts)
 	if err != nil {
-		txerr.Op("txfile/grow").CausedBy(err).Msg("failed to increase file size")
+		return txerr.Op("txfile/grow").CausedBy(err).
+			Msg("failed to increase file size")
 	}
 	return nil
 }
@@ -618,7 +640,7 @@ func doGrowFile(f *File, opts Options) reason {
 	// Allocate space on disk if prealloc is enabled and new file size is bounded.
 	if opts.Prealloc && maxSize > 0 {
 		if err := f.truncate(int64(maxSize)); err != nil {
-			return txerr.Wrap(err)
+			return err
 		}
 		if err := f.mmapUpdate(); err != nil {
 			return txerr.Wrap(err)
@@ -640,7 +662,8 @@ func shrinkFile(f *File, opts Options) reason {
 	// 1. Start transaction updating the file meta header only. This transaction must succeed.
 	maxPages, maxSize, err := initTxMaxSize(f, opts.MaxSize)
 	if err != nil {
-		return txerr.Op(op).CausedBy(err).Msg("failed to reduce the maximum file size")
+		return txerr.Op(op).CausedBy(err).
+			Msg("failed to reduce the maximum file size")
 	}
 
 	// 2. Transaction completed. Update file allocator limits
@@ -690,9 +713,8 @@ func initTxMaxSize(
 		metaID = tx.syncNewMeta(&newMetaBuf)
 		err := tx.writeSync.Wait()
 		if err != nil {
-			return txerr.Op(op).Of(TxFailed).CausedBy(err).Msg(
-				"failed to update the on disk max size header entry",
-			)
+			return txerr.Op(op).Of(TxFailed).CausedBy(err).
+				Msg("failed to update the on disk max size header entry")
 		}
 
 		return nil
@@ -723,12 +745,12 @@ func initTxReleaseRegions(f *File) {
 		// of the freelist. Pages to be freed must border on the files allocation
 		// end markers.
 		if err := tx.file.allocator.fileCommitAlloc(&csAlloc); err != nil {
-			return txerr.Wrap(err)
+			return err
 		}
 
 		// Serialize new freelist to disk.
 		if err := tx.file.allocator.fileCommitSerialize(&csAlloc, tx.scheduleWrite); err != nil {
-			return txerr.Wrap(err)
+			return err
 		}
 		tx.file.writer.Sync(tx.writeSync, syncDataOnly)
 
@@ -758,7 +780,7 @@ func withInitTx(f *File, fn func(tx *Tx) reason) reason {
 	defer tx.close()
 
 	commitOK := false
-	defer cleanup.IfNot(&commitOK, cleanup.IgnoreError(tx.rollbackChanges))
+	defer cleanup.IfNot(&commitOK, tx.rollbackChanges)
 
 	// use write transactions commit locks. As file if being generated, the
 	// locks are not really required, yet. But better execute a correct transaction

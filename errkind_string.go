@@ -4,9 +4,9 @@ package txfile
 
 import "strconv"
 
-const _ErrKind_name = "configuration errorinvalid parameterinvalid file sizepage id out of boundscan not create filetransaction failedmeta page invalidout of memoryunknown error kind"
+const _ErrKind_name = "internal errorcan not create fileconfiguration errorinvalid file sizemeta page invalidinvalid operationpage id out of boundsinvalid parameterout of memorytransaction failed during committransaction failedfinished transactionreadonly transactionunknown error kind"
 
-var _ErrKind_index = [...]uint8{0, 19, 36, 53, 74, 93, 111, 128, 141, 159}
+var _ErrKind_index = [...]uint16{0, 14, 33, 52, 69, 86, 103, 124, 141, 154, 186, 204, 224, 244, 262}
 
 func (i ErrKind) String() string {
 	if i < 0 || i >= ErrKind(len(_ErrKind_index)-1) {

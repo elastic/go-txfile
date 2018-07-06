@@ -18,9 +18,11 @@
 package txfile
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/elastic/go-txfile/internal/invariant"
+	"github.com/elastic/go-txfile/txerr"
 )
 
 // file global allocator state
@@ -156,7 +158,11 @@ func (a *allocator) makeTxAllocState(withOverflow bool, growPercentage int) txAl
 	}
 }
 
-func (a *allocator) fileCommitPrepare(st *allocCommitState, tx *txAllocState, forceUpdate bool) {
+func (a *allocator) fileCommitPrepare(
+	st *allocCommitState,
+	tx *txAllocState,
+	forceUpdate bool,
+) {
 	st.tx = tx
 	st.updated = forceUpdate || tx.Updated()
 	if st.updated {
@@ -164,8 +170,9 @@ func (a *allocator) fileCommitPrepare(st *allocCommitState, tx *txAllocState, fo
 	}
 }
 
-// TODO: s/error/reason
-func (a *allocator) fileCommitAlloc(st *allocCommitState) error {
+func (a *allocator) fileCommitAlloc(st *allocCommitState) reason {
+	const op = "txfile/commit-alloc-meta"
+
 	if !st.updated {
 		return nil
 	}
@@ -198,7 +205,8 @@ func (a *allocator) fileCommitAlloc(st *allocCommitState) error {
 	if n := prediction.count; n > 0 {
 		allocRegions = a.MetaAllocator().AllocRegions(st.tx, n)
 		if allocRegions == nil {
-			return errOutOfMemory
+			return txerr.Op(op).Of(OutOfMemory).
+				Msg("not enough space to allocate freelist meta pages")
 		}
 	}
 
@@ -277,15 +285,21 @@ func releaseOverflowPages(
 	return list, freed
 }
 
-// TODO: s/error/reason
 func (a *allocator) fileCommitSerialize(
 	st *allocCommitState,
-	onPage func(id PageID, buf []byte) error,
-) error {
+	onPage func(id PageID, buf []byte) reason,
+) reason {
+	const op = "txfile/commit-serialize-alloc"
+
 	if !st.updated || len(st.allocRegions) == 0 {
 		return nil
 	}
-	return writeFreeLists(st.allocRegions, a.pageSize, st.metaList, st.dataList, onPage)
+
+	err := writeFreeLists(st.allocRegions, a.pageSize, st.metaList, st.dataList, onPage)
+	if err != nil {
+		return txerr.Op(op).CausedBy(err).Msg("failed to serialize allocator state")
+	}
+	return nil
 }
 
 func (a *allocator) fileCommitMeta(meta *metaPage, st *allocCommitState) {
@@ -575,7 +589,7 @@ func (a *dataAllocator) Free(st *txAllocState, id PageID) {
 	traceln("free page:", id)
 
 	if id < 2 || id >= a.data.endMarker {
-		panic(errOutOfBounds)
+		panic(fmt.Sprintf("freed page ID %v out of bounds", id))
 	}
 
 	if !st.data.new.Has(id) {

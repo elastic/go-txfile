@@ -45,12 +45,16 @@ func GetMessage(in error) string {
 func Report(in error) string {
 	buf := &strbld.Builder{}
 	putStr(buf, directOp(in))
-	putKind(buf, directKind(in))
-	putStr(buf, directMsg(in))
+
+	// if hasMsg is false, new newline will be added when printing the 'cause'
+	hasMsg := any(
+		putKind(buf, directKind(in)),
+		putStr(buf, directMsg(in)),
+	)
 
 	switch err := in.(type) {
 	case withChild:
-		putErr(buf, err.Cause())
+		putErr(buf, hasMsg, err.Cause())
 
 	case withChildren:
 		for _, sub := range err.Causes() {
@@ -64,44 +68,45 @@ func Report(in error) string {
 	return buf.String()
 }
 
-func pad(b *strbld.Builder, p string) {
-	if b.Len() > 0 {
-		b.WriteString(p)
-	}
-}
-
-func putStr(b *strbld.Builder, s string) {
+func putStr(b *strbld.Builder, s string) bool {
 	if s != "" {
-		pad(b, ": ")
+		b.Pad(": ")
 		b.WriteString(s)
+		return true
 	}
+	return false
 }
 
-func putErr(b *strbld.Builder, err error) {
+func putErr(b *strbld.Builder, nl bool, err error) bool {
 	if err == nil {
-		return
+		return false
 	}
 
 	s := err.Error()
 	if s == "" {
-		return
+		return false
 	}
 
-	pad(b, ":\n\t")
+	if nl {
+		b.Pad(":\n\t")
+	} else {
+		b.Pad(": ")
+	}
 	b.WriteString(s)
+	return true
 }
 
-func putSubErr(b *strbld.Builder, err error) {
+func putSubErr(b *strbld.Builder, err error) bool {
 	if err == nil {
-		return
+		return false
 	}
 
 	s := err.Error()
 	if s == "" {
-		return
+		return false
 	}
 
-	pad(b, ":\n\t")
+	b.Pad(":\n\t")
 
 	// iterate lines
 	r := strings.NewReader(s)
@@ -109,17 +114,28 @@ func putSubErr(b *strbld.Builder, err error) {
 	first := true
 	for scanner.Scan() {
 		if !first {
-			pad(b, "\n\t")
+			b.Pad("\n\t")
 		} else {
 			first = false
 		}
 
 		b.WriteString(scanner.Text())
 	}
+	return true
 }
 
-func putKind(b *strbld.Builder, err error) {
+func putKind(b *strbld.Builder, err error) bool {
 	if err != nil {
-		putStr(b, err.Error())
+		return putStr(b, err.Error())
 	}
+	return false
+}
+
+func any(bs ...bool) bool {
+	for _, b := range bs {
+		if b {
+			return true
+		}
+	}
+	return false
 }

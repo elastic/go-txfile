@@ -35,19 +35,18 @@ type errE struct{ E }
 func Op(op string) *E                     { return newE().Op(op) }
 func Opf(s string, vs ...interface{}) *E  { return newE().Opf(s, vs...) }
 func Of(k error) *E                       { return newE().Of(k) }
-func Msg(s string) *E                     { return newE().Msg(s) }
-func Msgf(s string, vs ...interface{}) *E { return newE().Msgf(s, vs...) }
-func Wrap(err error) *E                   { return newE().CausedBy(err) }
+func Msg(s string) *E                     { e := newE(); e.Msg(s); return e }
+func Msgf(s string, vs ...interface{}) *E { e := newE(); e.Msgf(s, vs...); return e }
+func Wrap(err error) Error                { return newE().CausedBy(err).Err() }
 
 // chaining modifiers
-
-func newE() *E                                   { return &E{} }
-func (e *E) Op(op string) *E                     { e.op = op; return e }
-func (e *E) Opf(s string, vs ...interface{}) *E  { e.op = fmt.Sprintf(s, vs...); return e }
-func (e *E) Of(kind error) *E                    { e.kind = kind; return e }
-func (e *E) CausedBy(err error) *E               { e.cause = err; return e }
-func (e *E) Msg(s string) *E                     { e.message = s; return e }
-func (e *E) Msgf(s string, vs ...interface{}) *E { e.message = fmt.Sprintf(s, vs...); return e }
+func newE() *E                                      { return &E{} }
+func (e *E) Op(op string) *E                        { e.op = op; return e }
+func (e *E) Opf(s string, vs ...interface{}) *E     { e.op = fmt.Sprintf(s, vs...); return e }
+func (e *E) Of(kind error) *E                       { e.kind = kind; return e }
+func (e *E) CausedBy(err error) *E                  { e.cause = err; return e }
+func (e *E) Msg(s string) Error                     { e.message = s; return e.Err() }
+func (e *E) Msgf(s string, vs ...interface{}) Error { e.message = fmt.Sprintf(s, vs...); return e.Err() }
 
 // ErrorBuild + error interface implementation
 

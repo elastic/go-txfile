@@ -52,7 +52,7 @@ func FindErrWith(in error, pred func(err error) bool) error {
 	return found
 }
 
-// Iter iterates the complete error tree call fn on each found error value.
+// Iter iterates the complete error tree calling fn on each error value found.
 // The user function fn can stop the iteration by returning false.
 func Iter(in error, fn func(err error) bool) {
 	doIter(in, fn)

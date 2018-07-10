@@ -97,7 +97,7 @@ func (o *Options) Validate() reason {
 	if o.PageSize != 0 {
 		if !isPowerOf2(uint64(o.PageSize)) {
 			return txerr.Of(InvalidConfig).
-				Msgf("pageSize %v is no power of 2", o.PageSize)
+				Msgf("pageSize %v is not power of 2", o.PageSize)
 		}
 
 		if o.PageSize < minPageSize {

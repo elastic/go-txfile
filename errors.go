@@ -18,12 +18,58 @@
 package txfile
 
 import (
+	"github.com/elastic/go-txfile/internal/strbld"
 	"github.com/elastic/go-txfile/internal/vfs"
 	"github.com/elastic/go-txfile/txerr"
 )
 
 type reason interface {
-	txerr.ErrorBuild
+	txerr.Error
+}
+
+type Error struct {
+	op    string
+	kind  error
+	cause error
+
+	ctx errorCtx
+	msg string
+}
+
+type errorCtx struct {
+	isTx   bool
+	isPage bool
+
+	file string
+	txid uint
+	page PageID
+}
+
+var _ reason = &Error{}
+
+func (e *Error) Error() string { return txerr.Report(e) }
+func (e *Error) Op() string    { return e.op }
+func (e *Error) Kind() error   { return e.kind }
+func (e *Error) Cause() error  { return e.cause }
+func (e *Error) Message() string {
+	buf := &strbld.Builder{}
+	if e.ctx.file != "" {
+		buf.Fmt("file='%v'", e.ctx.file)
+	}
+	if e.ctx.isTx {
+		buf.Pad(" ")
+		buf.Fmt("tx=%v", e.ctx.txid)
+	}
+	if e.ctx.isPage {
+		buf.Pad(" ")
+		buf.Fmt("page=%v", e.ctx.page)
+	}
+
+	if e.msg != "" {
+		buf.Pad(": ")
+		buf.WriteString(e.msg)
+	}
+	return buf.String()
 }
 
 type ErrKind int
@@ -34,6 +80,7 @@ type ErrKind int
 const (
 	InternalError      ErrKind = iota // internal error
 	FileCreationFailed                // can not create file
+	InitFailed                        // failed to initialize from file
 	InvalidConfig                     // configuration error
 	InvalidFileSize                   // invalid file size
 	InvalidMetaPage                   // meta page invalid
@@ -42,6 +89,7 @@ const (
 	InvalidParam                      // invalid parameter
 	OutOfMemory                       // out of memory
 	TxCommitFail                      // transaction failed during commit
+	TxRollbackFail                    // transaction failed during rollback
 	TxFailed                          // transaction failed
 	TxFinished                        // finished transaction
 	TxReadOnly                        // readonly transaction
@@ -71,6 +119,6 @@ func (k ErrKind) Error() string {
 	return k.String()
 }
 
-func raiseOutOfBounds(op string, id PageID) *txerr.E {
-	return txerr.Op(op).Of(InvalidPageID).Msgf("out of bounds page id %v", id)
+func raiseOutOfBounds(id PageID) reason {
+	return txerr.Of(InvalidPageID).Msgf("out of bounds page id %v", id)
 }

@@ -182,7 +182,7 @@ func (w *writer) Run() (bool, reason) {
 				}
 
 				if syncErr := w.target.Sync(syncFlag); syncErr != nil {
-					err = txerr.Op("txfile/write-sync").CausedBy(syncErr)
+					err = txerr.Op("txfile/write-sync").CausedBy(syncErr).Err()
 				}
 			}
 			fsync.err = err

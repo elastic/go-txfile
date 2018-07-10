@@ -17,8 +17,6 @@
 
 package txfile
 
-import "github.com/elastic/go-txfile/txerr"
-
 // Page provides access to an on disk page.
 // Pages can only be overwritten from within a read-write Transaction.
 // Writes are be buffered until transaction commit, such that other but the
@@ -85,7 +83,8 @@ func (p *Page) Free() error {
 		return err
 	}
 	if p.flags.dirty {
-		return txerr.Op(op).Of(InvalidOp).Msg("freeing dirty pages is not allowed")
+		const msg = "freeing dirty pages is not allowed"
+		return &Error{op: op, kind: InvalidOp, ctx: p.errCtx(), msg: msg}
 	}
 
 	p.tx.freePage(p.id)
@@ -111,8 +110,8 @@ func (p *Page) Bytes() ([]byte, error) {
 		return nil, err
 	}
 	if p.bytes == nil && p.flags.new {
-		return nil, txerr.Op(op).Of(InvalidOp).
-			Msg("can not read contents of fresh allocated page without contents")
+		const msg = "can not read contents of fresh allocated page without contents"
+		return nil, &Error{op: op, kind: InvalidOp, ctx: p.errCtx(), msg: msg}
 	}
 
 	return p.getBytes(op)
@@ -122,7 +121,8 @@ func (p *Page) getBytes(op string) ([]byte, reason) {
 	if p.bytes == nil {
 		bytes := p.tx.access(p.ondiskID)
 		if bytes == nil {
-			return nil, raiseOutOfBounds(op, p.ondiskID)
+			cause := raiseOutOfBounds(p.ondiskID)
+			return nil, &Error{op: op, ctx: p.errCtx(), cause: cause}
 		}
 
 		p.bytes = bytes
@@ -190,8 +190,8 @@ func (p *Page) SetBytes(contents []byte) error {
 
 	pageSize := p.tx.PageSize()
 	if len(contents) > pageSize {
-		return txerr.Op(op).Of(InvalidParam).
-			Msg("page contents must not exceed the page size")
+		const msg = "page contents must not exceed the page size"
+		return &Error{op: op, kind: InvalidParam, ctx: p.errCtx(), msg: msg}
 	}
 
 	if len(contents) < pageSize {
@@ -230,7 +230,8 @@ func (p *Page) doFlush(op string) reason {
 		if p.id == p.ondiskID {
 			walID := p.tx.allocWALID(p.id)
 			if walID == 0 {
-				return txerr.Op(op).Of(OutOfMemory).Msg("not enough space to allocate write ahead page")
+				const msg = "not enough space to allocate write ahead page"
+				return &Error{op: op, kind: OutOfMemory, ctx: p.errCtx(), msg: msg}
 			}
 			p.ondiskID = walID
 		} else {
@@ -245,20 +246,36 @@ func (p *Page) doFlush(op string) reason {
 	return nil
 }
 
-func (p *Page) canRead(op string) reason {
-	return p.tx.canRead(op)
+func (p *Page) canRead(op string) *Error {
+	err := p.tx.canRead(op)
+	if err != nil {
+		err.ctx = p.errCtx()
+	}
+	return err
 }
 
-func (p *Page) canWrite(op string) reason {
+func (p *Page) canWrite(op string) *Error {
 	if err := p.tx.canWrite(op); err != nil {
+		err.ctx = p.errCtx()
 		return err
 	}
 
-	if p.flags.freed {
-		return txerr.Op(op).Of(InvalidOp).Msg("page is already freed")
+	var msg string
+	switch {
+	case p.flags.freed:
+		msg = "page is already freed"
+	case p.flags.flushed:
+		msg = "page is already flushed"
 	}
-	if p.flags.flushed {
-		return txerr.Op(op).Of(InvalidOp).Msg("page is already flushed")
+
+	if msg != "" {
+		return &Error{op: op, kind: InvalidOp, ctx: p.errCtx(), msg: msg}
 	}
 	return nil
+}
+
+func (p *Page) errCtx() errorCtx {
+	ctx := p.tx.errCtx()
+	ctx.page, ctx.isPage = p.id, true
+	return ctx
 }

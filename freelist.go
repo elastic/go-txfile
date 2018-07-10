@@ -403,7 +403,7 @@ func readFreeList(
 	rootPage := access(root)
 	if rootPage == nil {
 		return nil, txerr.Op(op).Of(InvalidMetaPage).
-			CausedBy(raiseOutOfBounds(op, root)).
+			CausedBy(raiseOutOfBounds(root)).
 			Msg("root page not in bounds")
 	}
 
@@ -413,7 +413,7 @@ func readFreeList(
 		node, payload := castFreePage(access(pageID))
 		if node == nil {
 			return nil, txerr.Op(op).Of(InvalidMetaPage).
-				CausedBy(raiseOutOfBounds(op, pageID)).
+				CausedBy(raiseOutOfBounds(pageID)).
 				Msg("invalid freelist node page")
 		}
 

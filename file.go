@@ -18,12 +18,14 @@
 package txfile
 
 import (
+	"fmt"
 	"math"
 	"math/bits"
 	"os"
 	"sync"
 	"unsafe"
 
+	"github.com/elastic/beats/libbeat/common/atomic"
 	"github.com/elastic/go-txfile/internal/cleanup"
 	"github.com/elastic/go-txfile/internal/invariant"
 	"github.com/elastic/go-txfile/internal/vfs"
@@ -50,6 +52,8 @@ type File struct {
 	// meta pages
 	meta       [2]*metaPage
 	metaActive int
+
+	txids atomic.Uint
 }
 
 // internal contants
@@ -67,16 +71,15 @@ const (
 // error if file access fails, file can not be locked or file meta pages are
 // found to be invalid.
 func Open(path string, mode os.FileMode, opts Options) (*File, error) {
-	const operation = "txfile/open"
+	const op = "txfile/open"
 
 	if err := opts.Validate(); err != nil {
-		return nil, txerr.Op(operation).CausedBy(err)
+		return nil, &Error{op: op, ctx: fileErrCtx(path), cause: err}
 	}
 
 	file, err := osfs.Open(path, mode)
 	if err != nil {
-		return nil, txerr.Op(operation).CausedBy(err).
-			Msgf("can not open file '%v'", path)
+		return nil, &Error{op: op, ctx: fileErrCtx(path), cause: err, msg: "can not open file"}
 	}
 
 	initOK := false
@@ -89,8 +92,7 @@ func Open(path string, mode os.FileMode, opts Options) (*File, error) {
 		f, err = openWith(file, opts)
 	}
 	if err != nil {
-		return nil, txerr.Op(operation).CausedBy(err).
-			Msgf("opening file '%v' failed", path)
+		return nil, &Error{op: op, ctx: fileErrCtx(path), cause: err, msg: "failed to open file"}
 	}
 
 	initOK = true
@@ -207,15 +209,21 @@ func newFile(
 
 // init initializes the File state from most recent valid meta-page.
 func (f *File) init(metaActive int, opts Options) reason {
+	const op = "txfile/init-read-state"
+
 	// reference active meta page for initializing internal structures
 	f.metaActive = metaActive
 	meta := f.meta[f.metaActive]
 
 	if err := readWALMapping(&f.wal, f.mmapedPage, meta.wal.Get()); err != nil {
-		return err
+		return &Error{op: op, kind: InitFailed, ctx: f.errCtx(), cause: err}
 	}
 
-	return readAllocatorState(&f.allocator, f, meta, opts)
+	if err := readAllocatorState(&f.allocator, f, meta, opts); err != nil {
+		return &Error{op: op, kind: InitFailed, ctx: f.errCtx(), cause: err}
+	}
+
+	return nil
 }
 
 // Close closes the file, after all transactions have been quit. After closing
@@ -275,7 +283,7 @@ func (f *File) BeginWith(settings TxOptions) *Tx {
 	lock := f.locks.TxLock(settings.Readonly)
 	lock.Lock()
 	tracef("init new transaction (readonly: %v)\n", settings.Readonly)
-	tx := newTx(f, lock, settings)
+	tx := newTx(f, f.txids.Inc(), lock, settings)
 	tracef("begin transaction: %p (readonly: %v)\n", tx, settings.Readonly)
 	return tx
 }
@@ -349,12 +357,12 @@ func (f *File) mmap() reason {
 	// update real file size
 	fileSize, fileErr := f.file.Size()
 	if fileErr != nil {
-		return txerr.Op(op).CausedBy(fileErr).
-			Msg("unable to determine file size for mmap region")
+		const msg = "unable to determine file size for mmap region"
+		return &Error{op: op, ctx: f.errCtx(), cause: fileErr, msg: msg}
 	}
 	if fileSize < 0 {
-		return txerr.Op(op).Of(InvalidFileSize).
-			Msgf("file size %v < 0", fileSize)
+		msg := fmt.Sprintf("file size %v < 0", fileSize)
+		return &Error{op: op, kind: InvalidFileSize, ctx: f.errCtx(), msg: msg}
 	}
 	f.size = fileSize
 
@@ -371,7 +379,7 @@ func (f *File) mmap() reason {
 	// map file
 	buf, fileErr := f.file.MMap(int(sz))
 	if err != nil {
-		return txerr.Op(op).CausedBy(err).Msg("can not mmap file")
+		return &Error{op: op, ctx: f.errCtx(), cause: err, msg: "can not mmap file"}
 	}
 
 	f.mapped = buf
@@ -387,7 +395,7 @@ func (f *File) munmap() reason {
 	err := f.file.MUnmap(f.mapped)
 	f.mapped = nil
 	if err != nil {
-		return txerr.Op(op).CausedBy(err)
+		return &Error{op: op, ctx: f.errCtx(), cause: err}
 	}
 	return nil
 }
@@ -413,9 +421,12 @@ func initNewFile(file vfs.File, opts Options) reason {
 	if opts.MaxSize > 0 && opts.Prealloc {
 		flags |= metaFlagPrealloc
 		if err := file.Truncate(int64(opts.MaxSize)); err != nil {
-			return txerr.Op(op).Of(FileCreationFailed).
-				CausedBy(err).
-				Msg("unable to preallocate file")
+			return &Error{
+				op:    op,
+				kind:  FileCreationFailed,
+				ctx:   fileErrCtx(file.Name()),
+				cause: err,
+				msg:   "unable to preallocate file"}
 		}
 	}
 
@@ -432,12 +443,14 @@ func initNewFile(file vfs.File, opts Options) reason {
 		}
 	}
 	if !isPowerOf2(uint64(pageSize)) {
-		return txerr.Op(op).Of(FileCreationFailed).CausedBy(
-			txerr.Of(InvalidParam).Msgf("pageSize %v is no power of 2", pageSize))
+		ctx := fileErrCtx(file.Name())
+		cause := txerr.Of(InvalidParam).Msgf("pageSize %v is not power of 2", pageSize)
+		return &Error{op: op, kind: FileCreationFailed, ctx: ctx, cause: cause}
 	}
 	if pageSize < minPageSize {
-		return txerr.Op(op).Of(FileCreationFailed).CausedBy(
-			txerr.Of(InvalidParam).Msgf("pageSize must be >= %v", minPageSize))
+		ctx := fileErrCtx(file.Name())
+		cause := txerr.Of(InvalidParam).Msgf("pageSize must be >= %v", minPageSize)
+		return &Error{op: op, kind: FileCreationFailed, ctx: ctx, cause: cause}
 	}
 
 	// create buffer to hold contents for the initial pages:
@@ -493,9 +506,13 @@ func initNewFile(file vfs.File, opts Options) reason {
 	}
 
 	if err != nil {
-		return txerr.Op(op).Of(FileCreationFailed).
-			CausedBy(err).
-			Msgf("io error while initializing data file")
+		return &Error{
+			op:    op,
+			kind:  FileCreationFailed,
+			ctx:   fileErrCtx(file.Name()),
+			cause: err,
+			msg:   "io error while initializing data file",
+		}
 	}
 	return nil
 }
@@ -800,4 +817,10 @@ func withInitTx(f *File, fn func(tx *Tx) reason) reason {
 	err := fn(tx)
 	commitOK = err == nil
 	return err
+}
+
+func (f *File) errCtx() errorCtx { return fileErrCtx(f.path) }
+
+func fileErrCtx(path string) errorCtx {
+	return errorCtx{file: path}
 }

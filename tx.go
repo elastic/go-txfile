@@ -18,6 +18,7 @@
 package txfile
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/elastic/go-txfile/internal/cleanup"
@@ -29,8 +30,10 @@ import (
 // A transaction MUST always be closed, so to guarantee locks being released as
 // well.
 type Tx struct {
-	flags     txFlags
-	file      *File
+	flags txFlags
+	file  *File
+	txid  uint // internal correlation id
+
 	lock      sync.Locker
 	writeSync *txWriteSync
 	rootID    PageID
@@ -76,7 +79,7 @@ type txFlags struct {
 	checkpoint bool // mark wal checkpoint has been applied
 }
 
-func newTx(file *File, lock sync.Locker, settings TxOptions) *Tx {
+func newTx(file *File, id uint, lock sync.Locker, settings TxOptions) *Tx {
 	meta := file.getMetaPage()
 	invariant.Check(meta != nil, "file meta is not set")
 
@@ -152,7 +155,7 @@ func (tx *Tx) RootPage() (*Page, error) {
 	if tx.rootID < 2 {
 		return nil, nil
 	}
-	return tx.Page(tx.rootID)
+	return tx.getPage("txfile/tx-access-root", tx.rootID)
 }
 
 // Rollback rolls back and closes the current transaction.  Rollback returns an
@@ -162,12 +165,12 @@ func (tx *Tx) Rollback() error {
 	const op = "txfile/tx-rollback"
 
 	tracef("rollback transaction: %p\n", tx)
-	err := tx.finishWith(op, func() reason {
+	err := tx.finishWith(func() reason {
 		tx.rollbackChanges()
 		return nil
 	})
 	if err != nil {
-		return txerr.Op(op).Of(TxCommitFail).CausedBy(err)
+		return &Error{op: op, kind: TxRollbackFail, ctx: tx.errCtx(), cause: err}
 	}
 	return nil
 }
@@ -180,7 +183,11 @@ func (tx *Tx) Commit() error {
 	const op = "txfile/tx-commit"
 
 	tracef("commit transaction: %p\n", tx)
-	return tx.finishWith(op, tx.commitChanges)
+	err := tx.finishWith(tx.commitChanges)
+	if err != nil {
+		return &Error{op: op, kind: TxCommitFail, ctx: tx.errCtx(), cause: err}
+	}
+	return nil
 }
 
 // Close closes the transaction, releasing any locks held by the transaction.
@@ -202,16 +209,22 @@ func (tx *Tx) Commit() error {
 //     return tx.Commit()
 //
 func (tx *Tx) Close() error {
-	const op = "txfile/tx-commit"
+	const op = "txfile/tx-close"
 
 	tracef("close transaction: %p\n", tx)
 	if !tx.flags.active {
 		return nil
 	}
-	return tx.finishWith(op, func() reason {
+
+	err := tx.finishWith(func() reason {
 		tx.rollbackChanges()
 		return nil
 	})
+	if err != nil {
+		return &Error{op: op, kind: TxRollbackFail, ctx: tx.errCtx(), cause: err}
+	}
+
+	return nil
 }
 
 // CheckpointWAL copies all overwrite pages contents into the original pages.
@@ -283,9 +296,9 @@ func (tx *Tx) doCheckpointWAL() {
 	tx.flags.checkpoint = true
 }
 
-func (tx *Tx) finishWith(op string, fn func() reason) reason {
+func (tx *Tx) finishWith(fn func() reason) reason {
 	if !tx.flags.active {
-		return txerr.Op(op).Of(TxFinished).Msg("transaction is already closed")
+		return txerr.Of(TxFinished).Msg("transaction is already closed")
 	}
 	defer tx.close()
 
@@ -609,7 +622,10 @@ func (tx *Tx) rollbackChanges() {
 // been freed.
 func (tx *Tx) Page(id PageID) (*Page, error) {
 	const op = "txfile/tx-access-page"
+	return tx.getPage(op, id)
+}
 
+func (tx *Tx) getPage(op string, id PageID) (*Page, error) {
 	inBounds := id >= 2
 	if tx.flags.readonly {
 		inBounds = inBounds && id < tx.dataEndID
@@ -617,11 +633,16 @@ func (tx *Tx) Page(id PageID) (*Page, error) {
 		inBounds = inBounds && id < tx.file.allocator.data.endMarker
 	}
 	if !inBounds {
-		return nil, raiseOutOfBounds(op, id)
+		return nil, &Error{op: op, ctx: tx.errCtx(), cause: raiseOutOfBounds(id)}
 	}
 
 	if tx.alloc.data.freed.Has(id) || tx.alloc.meta.freed.Has(id) {
-		return nil, txerr.Op(op).Of(InvalidOp).Msg("trying to access an already freed page")
+		return nil, &Error{
+			op:   op,
+			kind: InvalidOp,
+			ctx:  tx.errCtx(),
+			msg:  "trying to access an already freed page",
+		}
 	}
 
 	if p := tx.pages[id]; p != nil {
@@ -697,8 +718,8 @@ func (tx *Tx) allocPagesWith(op string, n int, fn func(*Page)) reason {
 		})
 	})
 	if count == 0 {
-		return txerr.Op(op).Of(OutOfMemory).
-			Msgf("not enough memory to allocate %v data page(s)", n)
+		msg := fmt.Sprintf("not enough memory to allocate %v data page(s)", n)
+		return &Error{op: op, kind: OutOfMemory, ctx: tx.errCtx(), msg: msg}
 	}
 	return nil
 }
@@ -738,20 +759,37 @@ func (tx *Tx) flushPages(op string) reason {
 	return nil
 }
 
-func (tx *Tx) canRead(op string) reason {
+func (tx *Tx) canRead(op string) *Error {
 	if !tx.flags.active {
-		return txerr.Op(op).Of(TxFinished).Msg("no write operation on finished transactions allowed")
+		return &Error{
+			op:   op,
+			kind: TxFinished,
+			ctx:  tx.errCtx(),
+			msg:  "no write operation on finished transactions allowed",
+		}
 	}
 	return nil
 }
 
-func (tx *Tx) canWrite(op string) reason {
+func (tx *Tx) canWrite(op string) *Error {
+	var kind error
+	var msg string
+
 	if !tx.flags.active {
-		return txerr.Op(op).Of(TxFinished).Msg("no write operation on finished transactions allowed")
-		// return errTxFinished
+		kind, msg = TxFinished, "no write operation on finished transactions allowed"
 	}
 	if tx.flags.readonly {
-		return txerr.Op(op).Of(TxReadOnly).Msg("no write operation on read only transaction allowed")
+		kind, msg = TxReadOnly, "no write operation on read only transaction allowed"
+	}
+
+	if kind != nil {
+		return &Error{op: op, kind: kind, ctx: tx.errCtx(), msg: msg}
 	}
 	return nil
+}
+
+func (tx *Tx) errCtx() errorCtx {
+	ctx := tx.file.errCtx()
+	ctx.txid, ctx.isTx = tx.txid, true
+	return ctx
 }

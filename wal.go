@@ -223,7 +223,7 @@ func readWAL(
 		node, data := castWalPage(access(pageID))
 		if node == nil {
 			return nil, nil, txerr.Op(op).Of(InvalidMetaPage).
-				CausedBy(raiseOutOfBounds(op, pageID)).
+				CausedBy(raiseOutOfBounds(pageID)).
 				Msg("write ahead metadata corrupted")
 		}
 

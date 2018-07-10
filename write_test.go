@@ -60,7 +60,7 @@ func TestFileWriter(t *testing.T) {
 
 	checkCause := func(assert *assertions, expected, err error) {
 		if reason, ok := err.(reason); ok {
-			assert.Equal(expected, reason.Err().Cause())
+			assert.Equal(expected, reason.Cause())
 		} else {
 			assert.Fail("expected failure reason")
 		}

@@ -38,6 +38,7 @@ import (
 // from within active transactions.
 type File struct {
 	path      string
+	readonly  bool
 	file      vfs.File
 	size      int64 // real file size
 	locks     lock
@@ -263,29 +264,45 @@ func (f *File) Close() error {
 	return errClose
 }
 
+// Readonly returns true if the file has been opened in readonly mode.
+func (f *File) Readonly() bool {
+	return f.readonly
+}
+
 // Begin creates a new read-write transaction. The transaction returned
 // does hold the Reserved Lock on the file. Use Close, Rollback, or Commit to
 // release the lock.
-func (f *File) Begin() *Tx {
+func (f *File) Begin() (*Tx, error) {
 	return f.BeginWith(TxOptions{Readonly: false})
 }
 
 // BeginReadonly creates a new readonly transaction. The transaction returned
 // does hold the Shared Lock on the file. Use Close() to release the lock.
-func (f *File) BeginReadonly() *Tx {
+func (f *File) BeginReadonly() (*Tx, error) {
 	return f.BeginWith(TxOptions{Readonly: true})
 }
 
 // BeginWith creates a new readonly or read-write transaction, with additional
 // transaction settings.
-func (f *File) BeginWith(settings TxOptions) *Tx {
+func (f *File) BeginWith(settings TxOptions) (*Tx, error) {
+	return f.beginTx(settings)
+}
+
+func (f *File) beginTx(settings TxOptions) (*Tx, reason) {
+	const op = "txfile/begin-tx"
+
+	if f.readonly && !settings.Readonly {
+		msg := "can not start writable transaction on readonly file"
+		return nil, &Error{op: op, kind: InvalidOp, ctx: f.errCtx(), msg: msg}
+	}
+
 	tracef("request new transaction (readonly: %v)\n", settings.Readonly)
 	lock := f.locks.TxLock(settings.Readonly)
 	lock.Lock()
 	tracef("init new transaction (readonly: %v)\n", settings.Readonly)
 	tx := newTx(f, f.txids.Inc(), lock, settings)
 	tracef("begin transaction: %p (readonly: %v)\n", tx, settings.Readonly)
-	return tx
+	return tx, nil
 }
 
 // PageSize returns the files page size in bytes
@@ -793,7 +810,11 @@ func initTxReleaseRegions(f *File) {
 }
 
 func withInitTx(f *File, fn func(tx *Tx) reason) reason {
-	tx := f.Begin()
+	tx, err := f.beginTx(TxOptions{Readonly: false})
+	if err != nil {
+		return err.(reason)
+	}
+
 	defer tx.close()
 
 	commitOK := false
@@ -814,7 +835,7 @@ func withInitTx(f *File, fn func(tx *Tx) reason) reason {
 	// we have to return early on error. On success, this is basically a no-op.
 	defer tx.writeSync.Wait()
 
-	err := fn(tx)
+	err = fn(tx)
 	commitOK = err == nil
 	return err
 }

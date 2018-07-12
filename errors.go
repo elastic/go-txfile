@@ -37,40 +37,23 @@ type Error struct {
 }
 
 type errorCtx struct {
-	isTx   bool
-	isPage bool
-
 	file string
+
+	isTx bool
 	txid uint
-	page PageID
+
+	isPage bool
+	page   PageID
 }
 
 var _ reason = &Error{}
 
-func (e *Error) Error() string { return txerr.Report(e) }
-func (e *Error) Op() string    { return e.op }
-func (e *Error) Kind() error   { return e.kind }
-func (e *Error) Cause() error  { return e.cause }
-func (e *Error) Message() string {
-	buf := &strbld.Builder{}
-	if e.ctx.file != "" {
-		buf.Fmt("file='%v'", e.ctx.file)
-	}
-	if e.ctx.isTx {
-		buf.Pad(" ")
-		buf.Fmt("tx=%v", e.ctx.txid)
-	}
-	if e.ctx.isPage {
-		buf.Pad(" ")
-		buf.Fmt("page=%v", e.ctx.page)
-	}
-
-	if e.msg != "" {
-		buf.Pad(": ")
-		buf.WriteString(e.msg)
-	}
-	return buf.String()
-}
+func (e *Error) Error() string   { return txerr.Report(e) }
+func (e *Error) Op() string      { return e.op }
+func (e *Error) Kind() error     { return e.kind }
+func (e *Error) Cause() error    { return e.cause }
+func (e *Error) Context() string { return e.ctx.String() }
+func (e *Error) Message() string { return e.msg }
 
 type ErrKind int
 
@@ -117,6 +100,22 @@ func (k ErrKind) Error() string {
 		k = endOfErrKind
 	}
 	return k.String()
+}
+
+func (ctx *errorCtx) String() string {
+	buf := &strbld.Builder{}
+	if ctx.file != "" {
+		buf.Fmt("file='%s'", ctx.file)
+	}
+	if ctx.isTx {
+		buf.Pad(" ")
+		buf.Fmt("tx=%v", ctx.txid)
+	}
+	if ctx.isPage {
+		buf.Pad(" ")
+		buf.Fmt("page=%v", ctx.page)
+	}
+	return buf.String()
 }
 
 func raiseOutOfBounds(id PageID) reason {

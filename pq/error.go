@@ -105,24 +105,28 @@ func (e *Error) of(k ErrKind) *Error {
 
 func (e *Error) causedBy(cause error) *Error {
 	e.cause = cause
-
-	if other, ok := cause.(*Error); ok {
-		e.ctx.merge(&other.ctx)
-		other.ctx = errorCtx{}
+	other, ok := cause.(*Error)
+	if !ok {
+		return e
 	}
+
+	// merge error and cause context such that the cause context only reports
+	// fields that differ from the current context.
+
+	errCtx := &e.ctx
+	causeCtx := &other.ctx
+
+	if errCtx.id == causeCtx.id {
+		causeCtx.id = 0 // delete common queue id from cause context
+	}
+	if errCtx.isPage && causeCtx.isPage && errCtx.page == causeCtx.page {
+		causeCtx.isPage = false // delete common page id from cause context
+	}
+
 	return e
 }
 
 func (e *Error) report(m string) *Error {
 	e.msg = m
 	return e
-}
-
-func (c *errorCtx) merge(other *errorCtx) {
-	if c.id == 0 {
-		c.id = other.id
-	}
-	if !c.isPage && other.isPage {
-		c.isPage, c.page = other.isPage, other.page
-	}
 }

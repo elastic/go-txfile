@@ -27,10 +27,6 @@ import (
 // ErrKind provides the pq related error kinds
 type ErrKind int
 
-// type reason interface {
-// txerr.Error
-// }
-
 type reason interface {
 	txerr.Error
 }
@@ -73,24 +69,22 @@ func (k ErrKind) Error() string {
 	return k.String()
 }
 
-func (e *Error) Error() string { return txerr.Report(e) }
-func (e *Error) Op() string    { return e.op }
-func (e *Error) Kind() error   { return e.kind }
-func (e *Error) Cause() error  { return e.cause }
-func (e *Error) Message() string {
+func (e *Error) Error() string   { return txerr.Report(e) }
+func (e *Error) Op() string      { return e.op }
+func (e *Error) Kind() error     { return e.kind }
+func (e *Error) Cause() error    { return e.cause }
+func (e *Error) Context() string { return e.ctx.String() }
+func (e *Error) Message() string { return e.msg }
+
+func (ctx *errorCtx) String() string {
 	buf := &strbld.Builder{}
-	if e.ctx.id != 0 {
-		buf.Fmt("queueID=%v", e.ctx.id)
+	if ctx.id != 0 {
+		buf.Fmt("queueID=%v", ctx.id)
 	}
 
-	if e.ctx.isPage {
+	if ctx.isPage {
 		buf.Pad(" ")
-		buf.Fmt("page=%v", e.ctx.page)
-	}
-
-	if e.msg != "" {
-		buf.Pad(": ")
-		buf.WriteString(e.msg)
+		buf.Fmt("page=%v", ctx.page)
 	}
 	return buf.String()
 }

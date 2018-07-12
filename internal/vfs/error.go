@@ -67,8 +67,8 @@ func (e *Error) Cause() error { return e.err }
 func (e *Error) Error() string {
 	buf := &strbld.Builder{}
 	putStr(buf, e.op)
-	putErr(buf, e.kind)
 	putStr(buf, e.path)
+	putErr(buf, e.kind)
 	putErr(buf, e.err)
 
 	if buf.Len() == 0 {

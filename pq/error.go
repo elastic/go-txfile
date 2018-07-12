@@ -17,16 +17,118 @@
 
 package pq
 
-import "errors"
+import (
+	"github.com/elastic/go-txfile"
 
-var (
-	errNODelegate          = errors.New("delegate must not be nil")
-	errInvalidPagesize     = errors.New("invalid page size")
-	errClosed              = errors.New("queue closed")
-	errNoQueueRoot         = errors.New("no queue root")
-	errIncompleteQueueRoot = errors.New("incomplete queue root")
-	errInvalidVersion      = errors.New("invalid queue version")
-	errACKEmptyQueue       = errors.New("ack on empty queue")
-	errACKTooManyEvents    = errors.New("too many events have been acked")
-	errSeekPageFailed      = errors.New("failed to seek to next page")
+	"github.com/elastic/go-txfile/internal/strbld"
+	"github.com/elastic/go-txfile/txerr"
 )
+
+// ErrKind provides the pq related error kinds
+type ErrKind int
+
+// type reason interface {
+// txerr.Error
+// }
+
+type reason interface {
+	txerr.Error
+}
+
+type Error struct {
+	op    string
+	kind  error
+	cause error
+	ctx   errorCtx
+	msg   string
+}
+
+type errorCtx struct {
+	id queueID
+
+	isPage bool
+	page   txfile.PageID
+}
+
+//go:generate stringer -type=ErrKind -linecomment=true
+const (
+	NoError          ErrKind = iota // no error
+	InitFailed                      // failed to initialize queue
+	InvalidParam                    // invalid parameter
+	InvalidPageSize                 // invalid page size
+	InvalidConfig                   // invalid queue config
+	QueueClosed                     // queue is already closed
+	ReaderClosed                    // reader is already closed
+	WriterClosed                    // writer is already closed
+	NoQueueRoot                     // no queue root
+	InvalidQueueRoot                // queue root is invalid
+	QueueVersion                    // unsupported queue version
+	ACKEmptyQueue                   // invalid ack on empty queue
+	ACKTooMany                      // too many events acked
+	SeekFail                        // failed to seek to next page
+	ReadFail                        // failed to read page
+)
+
+func (k ErrKind) Error() string {
+	return k.String()
+}
+
+func (e *Error) Error() string { return txerr.Report(e) }
+func (e *Error) Op() string    { return e.op }
+func (e *Error) Kind() error   { return e.kind }
+func (e *Error) Cause() error  { return e.cause }
+func (e *Error) Message() string {
+	buf := &strbld.Builder{}
+	if e.ctx.id != 0 {
+		buf.Fmt("queueID=%v", e.ctx.id)
+	}
+
+	if e.ctx.isPage {
+		buf.Pad(" ")
+		buf.Fmt("page=%v", e.ctx.page)
+	}
+
+	if e.msg != "" {
+		buf.Pad(": ")
+		buf.WriteString(e.msg)
+	}
+	return buf.String()
+}
+
+func IsQueueCorrupt(err error) bool {
+	for _, kind := range []ErrKind{InvalidQueueRoot, SeekFail} {
+		if txerr.Is(kind, err) {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Error) of(k ErrKind) *Error {
+	e.kind = k
+	return e
+}
+
+func (e *Error) causedBy(cause error) *Error {
+	e.cause = cause
+
+	if other, ok := cause.(*Error); ok {
+		e.ctx.merge(&other.ctx)
+		other.ctx = errorCtx{}
+	}
+	return e
+}
+
+func (e *Error) report(m string) *Error {
+	e.msg = m
+	return e
+}
+
+func (c *errorCtx) merge(other *errorCtx) {
+	if c.id == 0 {
+		c.id = other.id
+	}
+	if !c.isPage && other.isPage {
+		c.isPage, c.page = other.isPage, other.page
+	}
+}

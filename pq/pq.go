@@ -18,7 +18,10 @@
 package pq
 
 import (
+	"unsafe"
+
 	"github.com/elastic/go-txfile"
+	"github.com/elastic/go-txfile/txerr"
 )
 
 // Queue implements the on-disk queue data structure. The queue requires a
@@ -28,12 +31,20 @@ import (
 type Queue struct {
 	accessor access
 
+	id queueID
+
 	// TODO: add support for multiple named readers with separate ACK handling.
+
+	pagePool *pagePool
 
 	reader *Reader
 	writer *Writer
 	acker  *acker
+
+	settings Settings
 }
+
+type queueID int
 
 type position struct {
 	page txfile.PageID
@@ -71,53 +82,44 @@ func MakeRoot() [SzRoot]byte {
 // start transactions. An error is returned if the delegate is nil, the queue
 // header is invalid, some settings are invalid, or if some IO error occurred.
 func New(delegate Delegate, settings Settings) (*Queue, error) {
+	const op = "pq/new"
+
 	if delegate == nil {
-		return nil, errNODelegate
+		return nil, txerr.Op(op).Of(InvalidParam).Msg("delegate must not be nil")
 	}
 
-	accessor, err := makeAccess(delegate)
-	if err != nil {
-		return nil, err
+	accessor, k := makeAccess(delegate)
+	if k != NoError {
+		return nil, txerr.Op(op).Of(k).Err()
 	}
-
-	q := &Queue{accessor: accessor}
 
 	pageSize := delegate.PageSize()
-	pagePool := newPagePool(pageSize)
+
+	q := &Queue{
+		accessor: accessor,
+		settings: settings,
+		pagePool: newPagePool(pageSize),
+	}
+
+	// use pointer address as ID for correlating error messages
+	q.id = queueID(uintptr(unsafe.Pointer(q)))
+	accessor.quID = q.id
 
 	rootBuf, err := q.accessor.ReadRoot()
 	if err != nil {
-		return nil, err
+		return nil, txerr.Op(op).Of(InitFailed).CausedBy(err).
+			Msg("failed to read queue header")
 	}
 
 	root := castQueueRootPage(rootBuf[:])
 	if root.version.Get() != queueVersion {
-		return nil, errInvalidVersion
+		return nil, txerr.Op(op).Of(InitFailed).
+			CausedBy(txerr.Of(QueueVersion).
+				Msgf("queue version %v", root.version.Get()))
 	}
 
 	tracef("open queue: %p (pageSize: %v)\n", q, pageSize)
 	traceQueueHeader(root)
-
-	tail := q.accessor.ParsePosition(&root.tail)
-	writer, err := newWriter(&q.accessor, pagePool,
-		settings.WriteBuffer, tail, settings.Flushed)
-	if err != nil {
-		return nil, err
-	}
-
-	reader, err := newReader(&q.accessor)
-	if err != nil {
-		return nil, err
-	}
-
-	acker, err := newAcker(&q.accessor, settings.ACKed)
-	if err != nil {
-		return nil, err
-	}
-
-	q.reader = reader
-	q.writer = writer
-	q.acker = acker
 	return q, nil
 }
 
@@ -127,14 +129,32 @@ func (q *Queue) Close() error {
 	tracef("close queue %p\n", q)
 	defer tracef("queue %p closed\n", q)
 
-	q.reader.close()
-	q.acker.close()
-	return q.writer.close()
+	if q.reader != nil {
+		q.reader.close()
+		q.reader = nil
+	}
+
+	if q.acker != nil {
+		q.acker.close()
+		q.acker = nil
+	}
+
+	var err error
+	if q.writer != nil {
+		err = q.writer.close()
+		q.writer = nil
+	}
+
+	return err
 }
 
 // Pending returns the total number of enqueued, but unacked events.
 func (q *Queue) Pending() int {
-	tx := q.accessor.BeginRead()
+	tx, err := q.accessor.BeginRead()
+	if err != nil {
+		return -1
+	}
+
 	defer tx.Close()
 
 	hdr, err := q.accessor.RootHdr(tx)
@@ -154,14 +174,38 @@ func (q *Queue) Pending() int {
 // Writer returns the queue writer for inserting new events into the queue.
 // A queue has only one single writer instance, which is returned by GetWriter.
 // The writer is is not thread safe.
-func (q *Queue) Writer() *Writer {
-	return q.writer
+func (q *Queue) Writer() (*Writer, error) {
+	if q.writer != nil {
+		return q.writer, nil
+	}
+
+	rootBuf, err := q.accessor.ReadRoot()
+	if err != nil {
+		panic("TODO")
+	}
+
+	root := castQueueRootPage(rootBuf[:])
+	tail := q.accessor.ParsePosition(&root.tail)
+
+	writeBuffer := q.settings.WriteBuffer
+	flushed := q.settings.Flushed
+	writer, err := newWriter(&q.accessor, q.pagePool, writeBuffer, tail, flushed)
+	if err != nil {
+		panic("TODO")
+		// return nil, err
+	}
+
+	q.writer = writer
+	return q.writer, nil
 }
 
 // Reader returns the queue reader for reading a new events from the queue.
 // A queue has only one single reader instance.
 // The reader is not thread safe.
 func (q *Queue) Reader() *Reader {
+	if q.reader == nil {
+		q.reader = newReader(&q.accessor)
+	}
 	return q.reader
 }
 
@@ -169,10 +213,17 @@ func (q *Queue) Reader() *Reader {
 // processed.
 // The queue will try to remove these asynchronously.
 func (q *Queue) ACK(n uint) error {
-	return q.acker.handle(n)
+	return q.getAcker().handle(n)
 }
 
 // Active returns the number of active, not yet ACKed events.
 func (q *Queue) Active() (uint, error) {
-	return q.acker.Active()
+	return q.getAcker().Active()
+}
+
+func (q *Queue) getAcker() *acker {
+	if q.acker == nil {
+		q.acker = newAcker(&q.accessor, q.settings.ACKed)
+	}
+	return q.acker
 }

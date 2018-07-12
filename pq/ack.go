@@ -40,15 +40,8 @@ type ackState struct {
 	read position        // New on-disk read pointer, pointing to first not-yet ACKed event.
 }
 
-func newAcker(
-	accessor *access,
-	cb func(uint, uint),
-) (*acker, error) {
-	return &acker{
-		active:   true,
-		accessor: accessor,
-		ackCB:    cb,
-	}, nil
+func newAcker(accessor *access, cb func(uint, uint)) *acker {
+	return &acker{active: true, accessor: accessor, ackCB: cb}
 }
 
 func (a *acker) close() {
@@ -61,36 +54,41 @@ func (a *acker) close() {
 // or adding new contents to a page, the last event page in the queue will never
 // be freed. Still the read pointer might point past the last page.
 func (a *acker) handle(n uint) error {
+	const op = "pq/ack"
+
 	if n == 0 {
 		return nil
 	}
 
 	if !a.active {
-		return errClosed
+		return a.err(op).of(QueueClosed)
 	}
 
 	traceln("acker: pq ack events:", n)
 
 	state, err := a.initACK(n)
 	if err != nil {
-		return err
+		return a.errWrap(op, err)
 	}
 
 	// start write transaction to free pages and update the next read offset in
 	// the queue root
-	tx := a.accessor.BeginCleanup()
+	tx, txErr := a.accessor.BeginCleanup()
+	if txErr != nil {
+		return a.errWrap(op, txErr).report("failed to init cleanup tx")
+	}
 	defer tx.Close()
 
 	traceln("acker: free data pages:", len(state.free))
 	for _, id := range state.free {
 		page, err := tx.Page(id)
 		if err != nil {
-			return err
+			return a.errWrapPage(op, err, id).report("can not access page to be freed")
 		}
 
 		traceln("free page", id)
 		if err := page.Free(); err != nil {
-			return err
+			return a.errWrapPage(op, err, id).report("releasing page failed")
 		}
 	}
 
@@ -107,7 +105,7 @@ func (a *acker) handle(n uint) error {
 	traceQueueHeader(hdr)
 
 	if err := tx.Commit(); err != nil {
-		return err
+		return a.errWrap(op, err).report("failed to commit changes")
 	}
 
 	a.totalEventCount += n
@@ -123,8 +121,13 @@ func (a *acker) handle(n uint) error {
 
 // initACK uses a read-transaction to collect pages to be removed from list and
 // find offset of next read required to start reading the next un-acked event.
-func (a *acker) initACK(n uint) (ackState, error) {
-	tx := a.accessor.BeginRead()
+func (a *acker) initACK(n uint) (ackState, reason) {
+	const op = "pq/ack-precompute"
+
+	tx, txErr := a.accessor.BeginRead()
+	if txErr != nil {
+		return ackState{}, a.errWrap(op, txErr)
+	}
 	defer tx.Close()
 
 	hdr, err := a.accessor.RootHdr(tx)
@@ -136,10 +139,10 @@ func (a *acker) initACK(n uint) (ackState, error) {
 	startID := startPos.id
 	endID := startID + uint64(n)
 	if startPos.page == 0 {
-		return ackState{}, errACKEmptyQueue
+		return ackState{}, a.err(op).of(ACKEmptyQueue)
 	}
 	if !idLessEq(endID, endPos.id) {
-		return ackState{}, errACKTooManyEvents
+		return ackState{}, a.err(op).of(ACKTooMany)
 	}
 
 	c := makeTxCursor(tx, a.accessor, &cursor{
@@ -153,7 +156,7 @@ func (a *acker) initACK(n uint) (ackState, error) {
 	// concurrent writes.
 	ids, cleanAll, err := a.collectFreePages(&c, endID)
 	if err != nil {
-		return ackState{}, err
+		return ackState{}, a.errWrap(op, err)
 	}
 
 	// find offset of next event to start reading from
@@ -161,7 +164,7 @@ func (a *acker) initACK(n uint) (ackState, error) {
 	if !cleanAll {
 		head, read, err = a.findNewStartPositions(&c, endID)
 		if err != nil {
-			return ackState{}, err
+			return ackState{}, a.errWrap(op, err)
 		}
 	} else {
 		head = endPos
@@ -192,7 +195,8 @@ func (a *acker) queueRange(hdr *queuePage) (head, start, end position) {
 // events within the page have been acked. We want to free all pages, but the
 // very last data page, so to not interfere with concurrent writes.
 // All pages up to endID will be collected.
-func (a *acker) collectFreePages(c *txCursor, endID uint64) ([]txfile.PageID, bool, error) {
+func (a *acker) collectFreePages(c *txCursor, endID uint64) ([]txfile.PageID, bool, reason) {
+	const op = "pq/collect-acked-pages"
 	var (
 		ids             []txfile.PageID
 		firstID, lastID uint64
@@ -200,7 +204,7 @@ func (a *acker) collectFreePages(c *txCursor, endID uint64) ([]txfile.PageID, bo
 	)
 
 	for {
-		hdr, err := c.PageHeader()
+		hdr, err := c.PageHeader(op)
 		if err != nil {
 			return nil, false, err
 		}
@@ -234,7 +238,7 @@ func (a *acker) collectFreePages(c *txCursor, endID uint64) ([]txfile.PageID, bo
 		ids = append(ids, c.cursor.page)
 		ok, err := c.AdvancePage()
 		if err != nil {
-			return nil, false, err
+			return nil, false, a.errWrap(op, err)
 		}
 		invariant.Check(ok, "page list linkage broken")
 	}
@@ -244,10 +248,12 @@ func (a *acker) collectFreePages(c *txCursor, endID uint64) ([]txfile.PageID, bo
 
 // findNewStartPositions skips acked events, so to find the new head and read pointers to be set
 // in the updated queue header.
-func (a *acker) findNewStartPositions(c *txCursor, id uint64) (head, read position, err error) {
+func (a *acker) findNewStartPositions(c *txCursor, id uint64) (head, read position, err reason) {
+	const op = "pq/ack-compute-new-start"
+
 	var hdr *eventPage
 
-	hdr, err = c.PageHeader()
+	hdr, err = c.PageHeader(op)
 	if err != nil {
 		return
 	}
@@ -267,13 +273,14 @@ func (a *acker) findNewStartPositions(c *txCursor, id uint64) (head, read positi
 	c.cursor.off = head.off
 	for currentID := head.id; currentID != id; currentID++ {
 		var evtHdr *eventHeader
-		evtHdr, err = c.ReadEventHeader()
+		evtHdr, err = c.ReadEventHeader(op)
 		if err != nil {
 			return
 		}
 
 		err = c.Skip(int(evtHdr.sz.Get()))
 		if err != nil {
+			err = a.errWrap(op, err)
 			return
 		}
 	}
@@ -287,13 +294,18 @@ func (a *acker) findNewStartPositions(c *txCursor, id uint64) (head, read positi
 }
 
 // Active returns the total number of active, not yet ACKed events.
-func (a *acker) Active() (uint, error) {
-	tx := a.accessor.BeginRead()
+func (a *acker) Active() (uint, reason) {
+	const op = "pq/count-active-events"
+
+	tx, txErr := a.accessor.BeginRead()
+	if txErr != nil {
+		return 0, a.errWrap(op, txErr)
+	}
 	defer tx.Close()
 
 	hdr, err := a.accessor.RootHdr(tx)
 	if err != nil {
-		return 0, err
+		return 0, a.errWrap(op, err)
 	}
 
 	// Empty queue?
@@ -311,4 +323,19 @@ func (a *acker) Active() (uint, error) {
 	}
 
 	return uint(end - start), nil
+}
+
+func (a *acker) err(op string) *Error { return a.errPage(op, 0) }
+func (a *acker) errPage(op string, page txfile.PageID) *Error {
+	return &Error{op: op, ctx: a.errPageCtx(page)}
+}
+
+func (a *acker) errWrap(op string, cause error) *Error { return a.errWrapPage(op, cause, 0) }
+func (a *acker) errWrapPage(op string, cause error, page txfile.PageID) *Error {
+	return a.errPage(op, page).causedBy(cause)
+}
+
+func (a *acker) errCtx() errorCtx { return a.accessor.errCtx() }
+func (a *acker) errPageCtx(id txfile.PageID) errorCtx {
+	return a.accessor.errPageCtx(id)
 }

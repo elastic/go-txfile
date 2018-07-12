@@ -45,6 +45,7 @@ func GetMessage(in error) string {
 func Report(in error) string {
 	buf := &strbld.Builder{}
 	putStr(buf, directOp(in))
+	putStr(buf, directCtx(in))
 
 	// if hasMsg is false, new newline will be added when printing the 'cause'
 	hasMsg := any(
@@ -138,4 +139,11 @@ func any(bs ...bool) bool {
 		}
 	}
 	return false
+}
+
+func directCtx(in error) string {
+	if err, ok := in.(withContext); ok {
+		return err.Context()
+	}
+	return ""
 }

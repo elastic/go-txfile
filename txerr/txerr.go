@@ -31,6 +31,7 @@ type Error interface {
 type (
 	withOp       interface{ Op() string }
 	withKind     interface{ Kind() error }
+	withContext  interface{ Context() string }
 	withMessage  interface{ Message() string }
 	withChild    interface{ Cause() error }
 	withChildren interface{ Causes() []error }

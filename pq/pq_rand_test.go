@@ -156,11 +156,15 @@ func checkAvail(ctx *testCtx, qu *testQueue) {
 }
 
 func checkNoPending(ctx *testCtx, qu *testQueue) {
-	ctx.t.Equal(0, qu.Pending())
+	cnt, err := qu.Pending()
+	ctx.t.NoError(err)
+	ctx.t.Equal(0, cnt)
 }
 
 func checkPending(ctx *testCtx, qu *testQueue) {
-	ctx.t.Equal(len(ctx.written)-ctx.acked, qu.Pending())
+	cnt, err := qu.Pending()
+	ctx.t.NoError(err)
+	ctx.t.Equal(len(ctx.written)-ctx.acked, cnt)
 }
 
 func runScenario(t *mint.T, cfg config, ops scenario) bool {

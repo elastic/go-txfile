@@ -18,10 +18,10 @@
 package pq
 
 import (
+	"fmt"
 	"unsafe"
 
 	"github.com/elastic/go-txfile"
-	"github.com/elastic/go-txfile/txerr"
 )
 
 // Queue implements the on-disk queue data structure. The queue requires a
@@ -85,12 +85,12 @@ func New(delegate Delegate, settings Settings) (*Queue, error) {
 	const op = "pq/new"
 
 	if delegate == nil {
-		return nil, txerr.Op(op).Of(InvalidParam).Msg("delegate must not be nil")
+		return nil, errOp(op).of(InvalidParam).report("delegate must not be nil")
 	}
 
 	accessor, k := makeAccess(delegate)
 	if k != NoError {
-		return nil, txerr.Op(op).Of(k).Err()
+		return nil, errOp(op).of(k)
 	}
 
 	pageSize := delegate.PageSize()
@@ -107,15 +107,18 @@ func New(delegate Delegate, settings Settings) (*Queue, error) {
 
 	rootBuf, err := q.accessor.ReadRoot()
 	if err != nil {
-		return nil, txerr.Op(op).Of(InitFailed).CausedBy(err).
-			Msg("failed to read queue header")
+		return nil, wrapErr(op, err).of(InitFailed).
+			report("failed to read queue header")
 	}
 
 	root := castQueueRootPage(rootBuf[:])
 	if root.version.Get() != queueVersion {
-		return nil, txerr.Op(op).Of(InitFailed).
-			CausedBy(txerr.Of(QueueVersion).
-				Msgf("queue version %v", root.version.Get()))
+
+		cause := &Error{
+			kind: InitFailed,
+			msg:  fmt.Sprintf("queue version %v", root.version.Get()),
+		}
+		return nil, wrapErr(op, cause).of(InitFailed)
 	}
 
 	tracef("open queue: %p (pageSize: %v)\n", q, pageSize)

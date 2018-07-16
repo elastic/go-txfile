@@ -98,6 +98,14 @@ func IsQueueCorrupt(err error) bool {
 	return false
 }
 
+func errOp(op string) *Error {
+	return &Error{op: op}
+}
+
+func wrapErr(op string, cause error) *Error {
+	return errOp(op).causedBy(cause)
+}
+
 func (e *Error) of(k ErrKind) *Error {
 	e.kind = k
 	return e

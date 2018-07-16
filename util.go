@@ -19,8 +19,6 @@ package txfile
 
 import (
 	"math/bits"
-
-	"github.com/elastic/go-txfile/txerr"
 )
 
 // pagingWriter supports writing entries into a linked (pre-allocated) list of
@@ -139,7 +137,7 @@ func (w *pagingWriter) finalizePage() reason {
 
 func (w *pagingWriter) prepareNext(op string) reason {
 	if w.i >= len(w.ids) {
-		return txerr.Op(op).Of(InternalError).Msg("Not enough pages pre-allocated")
+		return errOp(op).of(InternalError).report("Not enough pages pre-allocated")
 	}
 
 	w.page = w.buf[w.off : w.off+w.pageSize]

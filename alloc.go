@@ -22,7 +22,6 @@ import (
 	"math"
 
 	"github.com/elastic/go-txfile/internal/invariant"
-	"github.com/elastic/go-txfile/txerr"
 )
 
 // file global allocator state
@@ -205,8 +204,8 @@ func (a *allocator) fileCommitAlloc(st *allocCommitState) reason {
 	if n := prediction.count; n > 0 {
 		allocRegions = a.MetaAllocator().AllocRegions(st.tx, n)
 		if allocRegions == nil {
-			return txerr.Op(op).Of(OutOfMemory).
-				Msg("not enough space to allocate freelist meta pages")
+			return a.err(op).of(OutOfMemory).
+				report("not enough space to allocate freelist meta pages")
 		}
 	}
 
@@ -297,7 +296,7 @@ func (a *allocator) fileCommitSerialize(
 
 	err := writeFreeLists(st.allocRegions, a.pageSize, st.metaList, st.dataList, onPage)
 	if err != nil {
-		return txerr.Op(op).CausedBy(err).Msg("failed to serialize allocator state")
+		return a.errWrap(op, err).report("failed to serialize allocator state")
 	}
 	return nil
 }
@@ -345,6 +344,14 @@ func (a *allocator) Rollback(st *txAllocState) {
 
 	// restore data area
 	a.data.rollback(&st.data)
+}
+
+func (a *allocator) err(op string) *Error {
+	return &Error{op: op}
+}
+
+func (a *allocator) errWrap(op string, err error) *Error {
+	return a.err(op).causedBy(err)
 }
 
 func (a *allocArea) commit(endMarker PageID, regions regionList) {

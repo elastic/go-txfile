@@ -19,8 +19,6 @@ package txfile
 
 import (
 	"unsafe"
-
-	"github.com/elastic/go-txfile/txerr"
 )
 
 // waLog (write-ahead-log) mapping page ids to overwrite page ids in
@@ -101,8 +99,8 @@ func (l *waLog) fileCommitAlloc(tx *Tx, st *walCommitState) reason {
 	if pages > 0 {
 		st.allocRegions = tx.metaAllocator().AllocRegions(&tx.alloc, pages)
 		if st.allocRegions == nil {
-			return txerr.Op(op).Of(OutOfMemory).
-				Msg("not enough space to allocate write ahead meta pages")
+			return errOp(op).of(OutOfMemory).
+				report("not enough space to allocate write ahead meta pages")
 		}
 	}
 	return nil
@@ -222,9 +220,9 @@ func readWAL(
 		metaPages.Add(pageID)
 		node, data := castWalPage(access(pageID))
 		if node == nil {
-			return nil, nil, txerr.Op(op).Of(InvalidMetaPage).
-				CausedBy(raiseOutOfBounds(pageID)).
-				Msg("write ahead metadata corrupted")
+			return nil, nil, errOp(op).of(InvalidMetaPage).
+				causedBy(raiseOutOfBounds(pageID)).
+				report("write ahead metadata corrupted")
 		}
 
 		count := int(node.count.Get())

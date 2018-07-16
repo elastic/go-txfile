@@ -23,7 +23,6 @@ import (
 	"sync"
 
 	"github.com/elastic/go-txfile/internal/vfs"
-	"github.com/elastic/go-txfile/txerr"
 )
 
 type writer struct {
@@ -160,12 +159,14 @@ func (w *writer) Run() (bool, reason) {
 			return msgs[i].id < msgs[j].id
 		})
 		for _, msg := range msgs {
+			const op = "txfile/write-page"
+
 			if err == nil {
 				// execute actual write on the page it's file offset:
 				off := uint64(msg.id) * uint64(w.pageSize)
 				tracef("write at(id=%v, off=%v, len=%v)\n", msg.id, off, len(msg.buf))
 
-				err = writeAt("txfile/write-page", w.target, msg.buf, int64(off))
+				err = writeAt(op, w.target, msg.buf, int64(off))
 			}
 
 			msg.sync.err = err
@@ -174,6 +175,8 @@ func (w *writer) Run() (bool, reason) {
 
 		// execute pending fsync:
 		if fsync := cmd.fsync; fsync != nil {
+			const op = "txfile/write-sync"
+
 			resetErr := cmd.syncFlags.Test(syncResetErr)
 			if err == nil {
 				syncFlag := vfs.SyncAll
@@ -182,7 +185,7 @@ func (w *writer) Run() (bool, reason) {
 				}
 
 				if syncErr := w.target.Sync(syncFlag); syncErr != nil {
-					err = txerr.Op("txfile/write-sync").CausedBy(syncErr).Err()
+					err = errOp(op).causedBy(syncErr)
 				}
 			}
 			fsync.err = err
@@ -285,8 +288,8 @@ func writeAt(op string, out io.WriterAt, buf []byte, off int64) reason {
 	for len(buf) > 0 {
 		n, err := out.WriteAt(buf, off)
 		if err != nil {
-			return txerr.Op(op).CausedBy(err).
-				Msgf("writing %v bytes to off=%v failed", len(buf), off)
+			return errOp(op).causedBy(err).
+				reportf("writing %v bytes to off=%v failed", len(buf), off)
 		}
 
 		off += int64(n)

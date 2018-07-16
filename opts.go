@@ -17,10 +17,6 @@
 
 package txfile
 
-import (
-	"github.com/elastic/go-txfile/txerr"
-)
-
 // Options provides common file options used when opening or creating a file.
 type Options struct {
 	// Additional flags.
@@ -73,13 +69,13 @@ const (
 func (o *Options) Validate() reason {
 	if o.Flags.Check(FlagUpdMaxSize) {
 		if o.Readonly {
-			return txerr.Of(InvalidConfig).
-				Msg("can not update max size on in readonly mode")
+			return errOf(InvalidConfig).
+				report("can not update max size on in readonly mode")
 		}
 
 		if !o.Flags.Check(FlagUnboundMaxSize) && o.MaxSize > 0 && o.MaxSize < minRequiredFileSize {
-			return txerr.Of(InvalidConfig).
-				Msgf("max size must be at least %v bytes ", minRequiredFileSize)
+			return errOf(InvalidConfig).
+				reportf("max size must be at least %v bytes ", minRequiredFileSize)
 		}
 	}
 
@@ -88,21 +84,20 @@ func (o *Options) Validate() reason {
 		totalPages := o.MaxSize / uint64(o.PageSize)
 		avail := totalPages - headerPages
 		if uint64(metaSz) >= avail {
-			return txerr.Of(InvalidConfig).
-				Msgf("meta area of %v pages exceeds the available pages %v",
-					metaSz, avail)
+			return errOf(InvalidConfig).
+				reportf("meta area of %v pages exceeds the available pages %v", metaSz, avail)
 		}
 	}
 
 	if o.PageSize != 0 {
 		if !isPowerOf2(uint64(o.PageSize)) {
-			return txerr.Of(InvalidConfig).
-				Msgf("pageSize %v is not power of 2", o.PageSize)
+			return errOf(InvalidConfig).
+				reportf("pageSize %v is not power of 2", o.PageSize)
 		}
 
 		if o.PageSize < minPageSize {
-			return txerr.Of(InvalidConfig).
-				Msgf("pageSize must be >= %v", minPageSize)
+			return errOf(InvalidConfig).
+				reportf("pageSize must be >= %v", minPageSize)
 		}
 	}
 

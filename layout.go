@@ -24,8 +24,6 @@ import (
 	"unsafe"
 
 	bin "github.com/urso/go-bin"
-
-	"github.com/elastic/go-txfile/txerr"
 )
 
 // on disk page layout for writing and parsing
@@ -131,13 +129,13 @@ func (m *metaPage) Finalize() {
 
 func (m *metaPage) Validate() reason {
 	if m.magic.Get() != magic {
-		return txerr.Of(InvalidMetaPage).Msg("invalid magic number")
+		return errOf(InvalidMetaPage).report("invalid magic number")
 	}
 	if m.version.Get() != version {
-		return txerr.Of(InvalidMetaPage).Msg("invalid version number")
+		return errOf(InvalidMetaPage).report("invalid version number")
 	}
 	if m.checksum.Get() != m.computeChecksum() {
-		return txerr.Of(InvalidMetaPage).Msg("checksum mismatch")
+		return errOf(InvalidMetaPage).report("checksum mismatch")
 	}
 
 	return nil

@@ -87,7 +87,7 @@ func (r *Reader) Available() (uint, error) {
 // Begin starts a new read transaction, shared between multiple read calls.
 // User must execute Done, to close the file transaction.
 func (r *Reader) Begin() error {
-	const op = "txfile/reader-begin"
+	const op = "pq/reader-begin"
 
 	if r.tx != nil {
 		r.tx.Close()

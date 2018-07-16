@@ -149,17 +149,17 @@ func (q *Queue) Close() error {
 }
 
 // Pending returns the total number of enqueued, but unacked events.
-func (q *Queue) Pending() int {
+func (q *Queue) Pending() (int, error) {
 	tx, err := q.accessor.BeginRead()
 	if err != nil {
-		return -1
+		return -1, err
 	}
 
 	defer tx.Close()
 
 	hdr, err := q.accessor.RootHdr(tx)
 	if err != nil {
-		return -1
+		return -1, err
 	}
 
 	head := q.accessor.ParsePosition(&hdr.read)
@@ -168,20 +168,22 @@ func (q *Queue) Pending() int {
 	}
 	tail := q.accessor.ParsePosition(&hdr.tail)
 
-	return int(tail.id - head.id)
+	return int(tail.id - head.id), nil
 }
 
 // Writer returns the queue writer for inserting new events into the queue.
 // A queue has only one single writer instance, which is returned by GetWriter.
 // The writer is is not thread safe.
 func (q *Queue) Writer() (*Writer, error) {
+	const op = "pq/get-writer"
+
 	if q.writer != nil {
 		return q.writer, nil
 	}
 
 	rootBuf, err := q.accessor.ReadRoot()
 	if err != nil {
-		panic("TODO")
+		return nil, q.accessor.errWrap(op, err)
 	}
 
 	root := castQueueRootPage(rootBuf[:])
@@ -191,8 +193,7 @@ func (q *Queue) Writer() (*Writer, error) {
 	flushed := q.settings.Flushed
 	writer, err := newWriter(&q.accessor, q.pagePool, writeBuffer, tail, flushed)
 	if err != nil {
-		panic("TODO")
-		// return nil, err
+		return nil, q.accessor.errWrap(op, err)
 	}
 
 	q.writer = writer

@@ -18,6 +18,8 @@
 package pq
 
 import (
+	"fmt"
+
 	"github.com/elastic/go-txfile"
 
 	"github.com/elastic/go-txfile/internal/strbld"
@@ -69,12 +71,13 @@ func (k ErrKind) Error() string {
 	return k.String()
 }
 
-func (e *Error) Error() string   { return txerr.Report(e) }
-func (e *Error) Op() string      { return e.op }
-func (e *Error) Kind() error     { return e.kind }
-func (e *Error) Cause() error    { return e.cause }
-func (e *Error) Context() string { return e.ctx.String() }
-func (e *Error) Message() string { return e.msg }
+func (e *Error) Error() string              { return txerr.Report(e, false) }
+func (e *Error) Format(s fmt.State, c rune) { txerr.Format(e, s, c) }
+func (e *Error) Op() string                 { return e.op }
+func (e *Error) Kind() error                { return e.kind }
+func (e *Error) Cause() error               { return e.cause }
+func (e *Error) Context() string            { return e.ctx.String() }
+func (e *Error) Message() string            { return e.msg }
 
 func (ctx *errorCtx) String() string {
 	buf := &strbld.Builder{}

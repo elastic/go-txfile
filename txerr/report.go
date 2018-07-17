@@ -19,6 +19,8 @@ package txerr
 
 import (
 	"bufio"
+	"fmt"
+	"io"
 	"strings"
 
 	"github.com/elastic/go-txfile/internal/strbld"
@@ -42,7 +44,22 @@ func GetMessage(in error) string {
 	return msg
 }
 
-func Report(in error) string {
+func Format(err error, s fmt.State, c rune) {
+	switch c {
+	case 'v':
+		if s.Flag('+') {
+			io.WriteString(s, Report(err, true))
+			return
+		}
+		fallthrough
+	case 's':
+		io.WriteString(s, Report(err, false))
+	case 'q':
+		fmt.Fprintf(s, "%q", Report(err, true))
+	}
+}
+
+func Report(in error, verbose bool) string {
 	buf := &strbld.Builder{}
 	putStr(buf, directOp(in))
 	putStr(buf, directCtx(in))
@@ -52,6 +69,10 @@ func Report(in error) string {
 		putKind(buf, directKind(in)),
 		putStr(buf, directMsg(in)),
 	)
+
+	if !verbose {
+		return buf.String()
+	}
 
 	switch err := in.(type) {
 	case withChild:
@@ -83,13 +104,13 @@ func putErr(b *strbld.Builder, nl bool, err error) bool {
 		return false
 	}
 
-	s := err.Error()
+	s := fmt.Sprintf("%+v", err)
 	if s == "" {
 		return false
 	}
 
 	if nl {
-		b.Pad(":\n\t")
+		b.Pad("\n\t")
 	} else {
 		b.Pad(": ")
 	}
@@ -102,12 +123,12 @@ func putSubErr(b *strbld.Builder, err error) bool {
 		return false
 	}
 
-	s := err.Error()
+	s := fmt.Sprintf("%+v", err)
 	if s == "" {
 		return false
 	}
 
-	b.Pad(":\n\t")
+	b.Pad("\n\t")
 
 	// iterate lines
 	r := strings.NewReader(s)

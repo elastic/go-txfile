@@ -42,5 +42,6 @@ type syncState struct{}
 // [4]: https://blogs.msdn.microsoft.com/emberger/2009/07/30/the-checkbox-that-saves-you-hours/
 // [5]: https://perspectives.mvdirona.com/2008/04/disks-lies-and-damn-disks/
 func (f *File) Sync(flags vfs.SyncFlag) error {
-	return f.File.Sync() // stdlib already uses FlushFileBuffes, yay
+	err := f.File.Sync() // stdlib already uses FlushFileBuffes, yay
+	return f.wrapErr("file/sync", err)
 }

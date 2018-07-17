@@ -102,11 +102,15 @@ func (q *testQueue) Close() {
 }
 
 func (q *testQueue) len() int {
-	return int(q.Reader().Available())
+	i, err := q.Reader().Available()
+	q.t.NoError(err)
+	return int(i)
 }
 
 func (q *testQueue) append(events ...string) {
-	w := q.Queue.Writer()
+	w, err := q.Queue.Writer()
+	q.t.FatalOnError(err)
+
 	for _, event := range events {
 		_, err := w.Write([]byte(event))
 		q.t.FatalOnError(err)
@@ -142,7 +146,10 @@ func (q *testQueue) read(n int) []string {
 }
 
 func (q *testQueue) flush() {
-	err := q.Queue.Writer().Flush()
+	w, err := q.Queue.Writer()
+	q.t.FatalOnError(err)
+
+	err = w.Flush()
 	q.t.NoError(err)
 }
 

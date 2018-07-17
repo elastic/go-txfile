@@ -18,9 +18,11 @@
 package osfs
 
 import (
-	"fmt"
+	"errors"
 
 	flock "github.com/theckman/go-flock"
+
+	"github.com/elastic/go-txfile/internal/vfs"
 )
 
 const (
@@ -31,9 +33,25 @@ type lockState struct {
 	*flock.Flock
 }
 
+var (
+	errAlreadyLocked     = errors.New("file is already locked")
+	errNotLocked         = errors.New("file is not locked")
+	errCanNotBeLockedNow = errors.New("file can not be locked right now")
+)
+
 func (f *File) Lock(exclusive, blocking bool) error {
+	err := f.doLock(blocking)
+	return f.wrapErrKind("file/lock", vfs.ErrLockFailed, err)
+}
+
+func (f *File) Unlock() error {
+	err := f.doUnlock()
+	return f.wrapErrKind("file/unlock", vfs.ErrLockFailed, err)
+}
+
+func (f *File) doLock(blocking bool) error {
 	if f.state.lock.Flock != nil {
-		return fmt.Errorf("file %v is already locked", f.Name())
+		return errAlreadyLocked
 	}
 
 	var ok bool
@@ -50,16 +68,16 @@ func (f *File) Lock(exclusive, blocking bool) error {
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("file %v can not be locked right now", f.Name())
+		return errCanNotBeLockedNow
 	}
 
 	f.state.lock.Flock = lock
 	return nil
 }
 
-func (f *File) Unlock() error {
+func (f *File) doUnlock() error {
 	if f.state.lock.Flock == nil {
-		return fmt.Errorf("file %v is not locked", f.Name())
+		return errNotLocked
 	}
 
 	err := f.state.lock.Unlock()

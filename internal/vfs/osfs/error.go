@@ -15,23 +15,53 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// +build darwin dragonfly freebsd linux netbsd openbsd solaris
-
 package osfs
 
 import (
-	"golang.org/x/sys/unix"
+	"os"
+
+	"github.com/elastic/go-txfile/internal/vfs"
 )
 
-type mmapState struct{}
+func errKind(err error) vfs.Kind {
+	if os.IsPermission(err) {
+		return vfs.ErrPermission
+	}
+	if os.IsExist(err) {
+		return vfs.ErrExist
+	}
+	if os.IsNotExist(err) {
+		return vfs.ErrExist
+	}
 
-func (f *File) MMap(sz int) ([]byte, error) {
-	b, err := unix.Mmap(int(f.Fd()), 0, int(sz), unix.PROT_READ, unix.MAP_SHARED)
-	return b, f.wrapErr("file/mmap", err)
-
+	switch err {
+	case os.ErrClosed:
+		return vfs.ErrClosed
+	default:
+		return sysErrKind(err)
+	}
 }
 
-func (f *File) MUnmap(b []byte) error {
-	err := unix.Munmap(b)
-	return f.wrapErr("file/mmap", err)
+func normalizeSysError(err error) error {
+	err = underlyingError(err)
+	if err == nil || err == errno0 {
+		return nil
+	}
+	return err
+}
+
+func underlyingError(in error) error {
+	switch err := in.(type) {
+	case *os.PathError:
+		return err.Err
+
+	case *os.LinkError:
+		return err.Err
+
+	case *os.SyscallError:
+		return err.Err
+
+	default:
+		return err
+	}
 }

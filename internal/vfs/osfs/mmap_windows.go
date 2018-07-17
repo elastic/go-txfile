@@ -30,17 +30,21 @@ type mmapState struct {
 }
 
 func (f *File) MMap(sz int) ([]byte, error) {
+	const op = "file/mmap"
+
 	szHi, szLo := uint32(sz>>32), uint32(sz)
 	hdl, err := windows.CreateFileMapping(windows.Handle(f.Fd()), nil, windows.PAGE_READONLY, szHi, szLo, nil)
 	if hdl == 0 {
-		return nil, os.NewSyscallError("CreateFileMapping", err)
+		cause := os.NewSyscallError("CreateFileMapping", err)
+		return nil, f.wrapErrKind(op, errKind(err), cause)
 	}
 
 	// map memory
 	addr, err := windows.MapViewOfFile(hdl, windows.FILE_MAP_READ, 0, 0, uintptr(sz))
 	if addr == 0 {
 		windows.CloseHandle(hdl)
-		return nil, os.NewSyscallError("MapViewOfFile", err)
+		cause := os.NewSyscallError("MapViewOfFile", err)
+		return nil, f.wrapErrKind(op, errKind(err), cause)
 	}
 
 	f.state.mmap.Handle = hdl
@@ -53,6 +57,8 @@ func (f *File) MMap(sz int) ([]byte, error) {
 }
 
 func (f *File) MUnmap(b []byte) error {
+	const op = "file/munmap"
+
 	err1 := windows.UnmapViewOfFile(uintptr(unsafe.Pointer(&b[0])))
 	b = nil
 
@@ -60,9 +66,11 @@ func (f *File) MUnmap(b []byte) error {
 	f.state.mmap.Handle = 0
 
 	if err1 != nil {
-		return os.NewSyscallError("UnmapViewOfFile", err1)
+		cause := os.NewSyscallError("UnmapViewOfFile", err1)
+		return f.wrapErrKind(op, errKind(err1), cause)
 	} else if err2 != nil {
-		return os.NewSyscallError("CloseHandle", err2)
+		cause := os.NewSyscallError("CloseHandle", err2)
+		return f.wrapErrKind(op, errKind(err2), cause)
 	}
 	return nil
 }

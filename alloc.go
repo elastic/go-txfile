@@ -18,6 +18,7 @@
 package txfile
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/elastic/go-txfile/internal/invariant"
@@ -156,7 +157,11 @@ func (a *allocator) makeTxAllocState(withOverflow bool, growPercentage int) txAl
 	}
 }
 
-func (a *allocator) fileCommitPrepare(st *allocCommitState, tx *txAllocState, forceUpdate bool) {
+func (a *allocator) fileCommitPrepare(
+	st *allocCommitState,
+	tx *txAllocState,
+	forceUpdate bool,
+) {
 	st.tx = tx
 	st.updated = forceUpdate || tx.Updated()
 	if st.updated {
@@ -164,7 +169,9 @@ func (a *allocator) fileCommitPrepare(st *allocCommitState, tx *txAllocState, fo
 	}
 }
 
-func (a *allocator) fileCommitAlloc(st *allocCommitState) error {
+func (a *allocator) fileCommitAlloc(st *allocCommitState) reason {
+	const op = "txfile/commit-alloc-meta"
+
 	if !st.updated {
 		return nil
 	}
@@ -197,7 +204,8 @@ func (a *allocator) fileCommitAlloc(st *allocCommitState) error {
 	if n := prediction.count; n > 0 {
 		allocRegions = a.MetaAllocator().AllocRegions(st.tx, n)
 		if allocRegions == nil {
-			return errOutOfMemory
+			return a.err(op).of(OutOfMemory).
+				report("not enough space to allocate freelist meta pages")
 		}
 	}
 
@@ -278,12 +286,19 @@ func releaseOverflowPages(
 
 func (a *allocator) fileCommitSerialize(
 	st *allocCommitState,
-	onPage func(id PageID, buf []byte) error,
-) error {
+	onPage func(id PageID, buf []byte) reason,
+) reason {
+	const op = "txfile/commit-serialize-alloc"
+
 	if !st.updated || len(st.allocRegions) == 0 {
 		return nil
 	}
-	return writeFreeLists(st.allocRegions, a.pageSize, st.metaList, st.dataList, onPage)
+
+	err := writeFreeLists(st.allocRegions, a.pageSize, st.metaList, st.dataList, onPage)
+	if err != nil {
+		return a.errWrap(op, err).report("failed to serialize allocator state")
+	}
+	return nil
 }
 
 func (a *allocator) fileCommitMeta(meta *metaPage, st *allocCommitState) {
@@ -329,6 +344,14 @@ func (a *allocator) Rollback(st *txAllocState) {
 
 	// restore data area
 	a.data.rollback(&st.data)
+}
+
+func (a *allocator) err(op string) *Error {
+	return &Error{op: op}
+}
+
+func (a *allocator) errWrap(op string, err error) *Error {
+	return a.err(op).causedBy(err)
 }
 
 func (a *allocArea) commit(endMarker PageID, regions regionList) {
@@ -400,12 +423,9 @@ func (mm *metaManager) Ensure(st *txAllocState, n uint) bool {
 	// Can not grow until 'requiredMax' -> try to grow up to requiredMin,
 	// potentially allocating pages from the overflow area
 	requiredMin := szMinMeta - total
-	if mm.tryGrow(st, requiredMin, st.options.overflowAreaEnabled) {
-		return true
-	}
 
-	// out of memory
-	return false
+	// returns false if we are out of memory
+	return mm.tryGrow(st, requiredMin, st.options.overflowAreaEnabled)
 }
 
 func (mm *metaManager) tryGrow(
@@ -576,7 +596,7 @@ func (a *dataAllocator) Free(st *txAllocState, id PageID) {
 	traceln("free page:", id)
 
 	if id < 2 || id >= a.data.endMarker {
-		panic(errOutOfBounds)
+		panic(fmt.Sprintf("freed page ID %v out of bounds", id))
 	}
 
 	if !st.data.new.Has(id) {
@@ -713,7 +733,7 @@ func (s *txAllocArea) Updated() bool {
 // allocator state (de-)serialization
 // ----------------------------------
 
-func readAllocatorState(a *allocator, f *File, meta *metaPage, opts Options) error {
+func readAllocatorState(a *allocator, f *File, meta *metaPage, opts Options) reason {
 	if a.maxSize > 0 {
 		a.maxPages = a.maxSize / a.pageSize
 	}

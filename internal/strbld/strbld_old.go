@@ -15,23 +15,20 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// +build darwin dragonfly freebsd linux netbsd openbsd solaris
+// +build !go1.10
 
-package osfs
+package strbld
 
 import (
-	"golang.org/x/sys/unix"
+	"bytes"
+	"unsafe"
 )
 
-type mmapState struct{}
-
-func (f *File) MMap(sz int) ([]byte, error) {
-	b, err := unix.Mmap(int(f.Fd()), 0, int(sz), unix.PROT_READ, unix.MAP_SHARED)
-	return b, f.wrapErr("file/mmap", err)
-
+type Builder struct {
+	bytes.Buffer
 }
 
-func (f *File) MUnmap(b []byte) error {
-	err := unix.Munmap(b)
-	return f.wrapErr("file/mmap", err)
+func (b *Builder) String() string {
+	buf := b.Buffer.Bytes()
+	return *(*string)(unsafe.Pointer(&buf))
 }

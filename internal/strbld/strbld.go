@@ -15,23 +15,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// +build darwin dragonfly freebsd linux netbsd openbsd solaris
+package strbld
 
-package osfs
+import "fmt"
 
-import (
-	"golang.org/x/sys/unix"
-)
-
-type mmapState struct{}
-
-func (f *File) MMap(sz int) ([]byte, error) {
-	b, err := unix.Mmap(int(f.Fd()), 0, int(sz), unix.PROT_READ, unix.MAP_SHARED)
-	return b, f.wrapErr("file/mmap", err)
-
+func (b *Builder) Pad(str string) {
+	if b.Len() > 0 {
+		b.WriteString(str)
+	}
 }
 
-func (f *File) MUnmap(b []byte) error {
-	err := unix.Munmap(b)
-	return f.wrapErr("file/mmap", err)
+func (b *Builder) Fmt(s string, vs ...interface{}) {
+	b.WriteString(fmt.Sprintf(s, vs...))
 }

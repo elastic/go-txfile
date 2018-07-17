@@ -63,6 +63,12 @@ func (e *Error) Op() string   { return e.op }
 func (e *Error) Kind() error  { return e.kind }
 func (e *Error) Path() string { return e.path }
 func (e *Error) Cause() error { return e.err }
+func (e *Error) Errors() []error {
+	if e.err == nil {
+		return nil
+	}
+	return []error{e.err}
+}
 
 func (e *Error) Error() string {
 	buf := &strbld.Builder{}

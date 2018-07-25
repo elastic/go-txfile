@@ -35,6 +35,7 @@ type Error struct {
 type Kind int
 
 //go:generate stringer -type=Kind -linecomment=true
+//go:generate beatsfmt -w kind_string.go
 const (
 	ErrOSOther      Kind = iota // unknown OS error
 	ErrPermission               // permission denied

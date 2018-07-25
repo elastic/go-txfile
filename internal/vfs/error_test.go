@@ -18,11 +18,11 @@
 package vfs
 
 import (
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/sys/unix"
 )
 
 func TestErrorFmt(t *testing.T) {
@@ -44,7 +44,7 @@ func TestErrorFmt(t *testing.T) {
 			err: Err("pkg/op", ErrPermission, "path/to/file", &os.PathError{
 				Op:   "stat",
 				Path: "path/to/file",
-				Err:  unix.EPERM,
+				Err:  errors.New("operation not permitted"),
 			}),
 			expected: "pkg/op: path/to/file: permission denied: stat path/to/file: operation not permitted",
 		},

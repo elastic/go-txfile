@@ -20,6 +20,8 @@ package osfs
 import (
 	"os"
 	"syscall"
+
+	"github.com/elastic/go-txfile/internal/vfs"
 )
 
 // File implements vfs.File for the current target operating system.
@@ -39,20 +41,37 @@ var errno0 = syscall.Errno(0)
 func Open(path string, mode os.FileMode) (*File, error) {
 	flags := os.O_RDWR | os.O_CREATE
 	f, err := os.OpenFile(path, flags, mode)
-	return &File{File: f}, err
+	if err != nil {
+		return nil, vfs.Err("file/open", errKind(err), path, err)
+	}
+	return &File{File: f}, nil
 }
 
-func (o *File) Size() (int64, error) {
-	stat, err := o.File.Stat()
+func (f *File) Size() (int64, error) {
+	stat, err := f.Stat()
 	if err != nil {
 		return -1, err
 	}
 	return stat.Size(), nil
 }
 
-func normalizeSysError(err error) error {
-	if err == nil || err == errno0 {
+func (f *File) Stat() (os.FileInfo, error) {
+	stat, err := f.File.Stat()
+	return stat, f.wrapErr("file/stat", err)
+}
+
+func (f *File) Truncate(sz int64) error {
+	err := f.File.Truncate(sz)
+	return f.wrapErr("file/truncate", err)
+}
+
+func (f *File) wrapErr(op string, err error) error {
+	return f.wrapErrKind(op, errKind(err), err)
+}
+
+func (f *File) wrapErrKind(op string, k vfs.Kind, err error) error {
+	if err == nil {
 		return nil
 	}
-	return err
+	return vfs.Err(op, k, f.Name(), err)
 }

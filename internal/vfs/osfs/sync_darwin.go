@@ -37,6 +37,11 @@ type syncState struct{}
 // [1]: https://www.unix.com/man-page/osx/2/fsync
 // [2]: https://www.unix.com/man-page/osx/2/fcntl
 func (f *File) Sync(flags vfs.SyncFlag) error {
+	err := f.doSync(flags)
+	return f.wrapErr("file/sync", err)
+}
+
+func (f *File) doSync(flags vfs.SyncFlag) error {
 	for {
 		_, err := unix.FcntlInt(f.File.Fd(), unix.F_FULLFSYNC, 0)
 		err = normalizeSysError(err)

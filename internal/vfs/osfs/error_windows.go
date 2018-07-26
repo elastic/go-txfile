@@ -15,23 +15,39 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// +build darwin dragonfly freebsd linux netbsd openbsd solaris
-
 package osfs
 
 import (
-	"golang.org/x/sys/unix"
+	"syscall"
+
+	"github.com/elastic/go-txfile/internal/vfs"
 )
 
-type mmapState struct{}
+const (
+	ERROR_DISK_FULL             syscall.Errno = 62
+	ERROR_DISK_QUOTA_EXCEEDED   syscall.Errno = 1295
+	ERROR_TOO_MANY_OPEN_FILES   syscall.Errno = 4
+	ERROR_LOCK_FAILED           syscall.Errno = 167
+	ERROR_CANT_RESOLVE_FILENAME syscall.Errno = 1921
+)
 
-func (f *File) MMap(sz int) ([]byte, error) {
-	b, err := unix.Mmap(int(f.Fd()), 0, int(sz), unix.PROT_READ, unix.MAP_SHARED)
-	return b, f.wrapErr("file/mmap", err)
+// sysErrKind maps Windows error codes to vfs related error codes.
+func sysErrKind(err error) vfs.Kind {
+	switch underlyingError(err) {
 
-}
+	case ERROR_DISK_FULL, ERROR_DISK_QUOTA_EXCEEDED:
+		return vfs.ErrNoSpace
 
-func (f *File) MUnmap(b []byte) error {
-	err := unix.Munmap(b)
-	return f.wrapErr("file/mmap", err)
+	case ERROR_TOO_MANY_OPEN_FILES:
+		return vfs.ErrFDLimit
+
+	case ERROR_LOCK_FAILED:
+		return vfs.ErrLockFailed
+
+	case ERROR_CANT_RESOLVE_FILENAME:
+		return vfs.ErrResolvePath
+
+	default:
+		return vfs.ErrOSOther
+	}
 }

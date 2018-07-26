@@ -19,7 +19,11 @@
 
 package osfs
 
-import "golang.org/x/sys/unix"
+import (
+	"golang.org/x/sys/unix"
+
+	"github.com/elastic/go-txfile/internal/vfs"
+)
 
 type lockState struct{}
 
@@ -32,9 +36,11 @@ func (f *File) Lock(exclusive, blocking bool) error {
 		flags |= unix.LOCK_NB
 	}
 
-	return unix.Flock(int(f.Fd()), flags)
+	err := unix.Flock(int(f.Fd()), flags)
+	return f.wrapErrKind("file/lock", vfs.ErrLockFailed, err)
 }
 
 func (f *File) Unlock() error {
-	return unix.Flock(int(f.Fd()), unix.LOCK_UN)
+	err := unix.Flock(int(f.Fd()), unix.LOCK_UN)
+	return f.wrapErrKind("file/unlock", vfs.ErrUnlockFailed, err)
 }

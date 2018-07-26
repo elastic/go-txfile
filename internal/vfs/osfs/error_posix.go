@@ -15,23 +15,38 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// +build darwin dragonfly freebsd linux netbsd openbsd solaris
+// +build !windows
 
 package osfs
 
 import (
-	"golang.org/x/sys/unix"
+	"syscall"
+
+	"github.com/elastic/go-txfile/internal/vfs"
 )
 
-type mmapState struct{}
+// sysErrKind maps POSIX error codes to vfs related error codes.
+func sysErrKind(err error) vfs.Kind {
+	err = underlyingError(err)
+	switch err {
+	case syscall.EDQUOT, syscall.ENOSPC, syscall.ENFILE:
+		return vfs.ErrNoSpace
 
-func (f *File) MMap(sz int) ([]byte, error) {
-	b, err := unix.Mmap(int(f.Fd()), 0, int(sz), unix.PROT_READ, unix.MAP_SHARED)
-	return b, f.wrapErr("file/mmap", err)
+	case syscall.EMFILE:
+		return vfs.ErrFDLimit
 
-}
+	case syscall.ENOTDIR:
+		return vfs.ErrResolvePath
 
-func (f *File) MUnmap(b []byte) error {
-	err := unix.Munmap(b)
-	return f.wrapErr("file/mmap", err)
+	case syscall.ENOTSUP:
+		return vfs.ErrNotSupported
+
+	case syscall.EIO:
+		return vfs.ErrIO
+
+	case syscall.EDEADLK:
+		return vfs.ErrLockFailed
+	}
+
+	return vfs.ErrOSOther
 }

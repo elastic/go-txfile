@@ -41,7 +41,7 @@ type Error interface {
 	// // Context returns a formatted string of the failed operations variables/context
 	// func Context() string
 	//
-	// // Causes collects and returns multiple errors, leaading to the current error.
+	// // Causes collects and returns multiple errors, leading to the current error.
 	// // Either Cause or Causes should be implemented, but not both.
 	// Causes() []error
 

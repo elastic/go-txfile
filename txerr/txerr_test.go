@@ -63,20 +63,20 @@ func TestErrQueries(t *testing.T) {
 		kind2 = errors.New("kind2")
 		kind3 = errors.New("kind3")
 		kind4 = errors.New("kind4")
+
+		err1 = &testErr{op: "err1", kind: kind1}
+		err2 = &testErr{op: "err2", kind: kind2}
+		err3 = &testErr{op: "err3", cause: err1}
+		err4 = &testErr{op: "err4", kind: kind3, cause: err3}
+		err5 = &testErr{op: "err5"}
+		err6 = &testErr{kind: kind2}
+		err7 = &testErr{kind: kind2, cause: err3}
+
+		merr = &testMultErr{kind: kind4, causes: []error{
+			err4,
+			err2,
+		}}
 	)
-
-	err1 := &testErr{op: "err1", kind: kind1}
-	err2 := &testErr{op: "err2", kind: kind2}
-	err3 := &testErr{op: "err3", cause: err1}
-	err4 := &testErr{op: "err4", kind: kind3, cause: err3}
-	err5 := &testErr{op: "err5"}
-	err6 := &testErr{kind: kind2}
-	err7 := &testErr{kind: kind2, cause: err3}
-
-	merr := &testMultErr{kind: kind4, causes: []error{
-		err4,
-		err2,
-	}}
 
 	t.Run("find kind", func(t *testing.T) {
 		type testCase struct {
@@ -89,13 +89,11 @@ func TestErrQueries(t *testing.T) {
 				kind:     kind1,
 				expected: err1,
 			},
-
 			"kind1 in nested multierr": {
 				in:       merr,
 				kind:     kind1,
 				expected: err1,
 			},
-
 			"kind2 not in nested": {
 				in:       err3,
 				kind:     kind2,
@@ -152,13 +150,11 @@ func TestErrQueries(t *testing.T) {
 				op:       "err1",
 				expected: err1,
 			},
-
 			"op err1 in nested multierr": {
 				in:       merr,
 				op:       "err1",
 				expected: err1,
 			},
-
 			"op err2 not in nested": {
 				in:       err3,
 				op:       "err2",

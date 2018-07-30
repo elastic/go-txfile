@@ -32,8 +32,11 @@
 // Errors are treated as a tree of individual error values. Each node in the
 // tree can have 0, 1 or N children. Errors capturing a single cause only must
 // implement `Cause() error`. Errors capturing multiple casues must implement
-// `Causes() []error`. Leaf-Nodes either do not implement Cause,Causes or must
-// return nil.
+// `Causes() []error`. An error is a Leaf-Node if:
+// - It does not implement `Cause()` or `Causes()`
+// - It implements `Cause()` and `err.Cause() == nil`
+// - It implements `Causes()` and `len(err.Causes()) == 0`.
+//
 // Each node in the tree provides addition context. The operation which caused
 // the error (common format: `package-name/type-method`), an error kind for use
 // by the application (query error type and recover), a custom error context
@@ -44,7 +47,7 @@
 // a custom type + constants for every supported error kind. Common pattern
 // used within txfile:
 //
-//    // this type declaration ensures comparisons with values from other packets
+//    // this type declaration ensures comparisons with values from other package
 //    // will not get us false positives
 //    type errKind int
 //
@@ -62,7 +65,7 @@
 // nested error should not repeat the variables also present in the parent
 // context.  This requires us to implement some kind of context-merging when
 // adding a cause to an error.
-// Common pattern for error types used in tfile:
+// Common pattern for error types used in txfile:
 //
 //    type Error struct {
 //      op string

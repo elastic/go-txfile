@@ -31,7 +31,7 @@
 //
 // Errors are treated as a tree of individual error values. Each node in the
 // tree can have 0, 1 or N children. Errors capturing a single cause only must
-// implement `Cause() error`. Errors capturing multiple casues must implement
+// implement `Cause() error`. Errors capturing multiple causes must implement
 // `Causes() []error`. An error is a Leaf-Node if:
 // - It does not implement `Cause()` or `Causes()`
 // - It implements `Cause()` and `err.Cause() == nil`
@@ -85,7 +85,7 @@
 //      k3 string
 //    }
 //
-//    // fullfill txerr.Error interface:
+//    // fulfill txerr.Error interface:
 //    func (e *Error) Error() string   { return txerr.Report(e) } // implement `error` with help of txerr
 //    func (e *Error) Op() string      { return e.op }
 //    func (e *Error) Kind() error     { return e.kind }

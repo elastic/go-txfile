@@ -35,15 +35,15 @@ type Delegate interface {
 	// BeginWrite must create a read-write transaction for use by the writer.
 	// The transaction will be used to allocate pages and flush the current write
 	// buffer.
-	BeginWrite() *txfile.Tx
+	BeginWrite() (*txfile.Tx, error)
 
 	// BeginRead must return a readonly transaction.
-	BeginRead() *txfile.Tx
+	BeginRead() (*txfile.Tx, error)
 
 	// BeginCleanup must return a read-write transaction for the ACK handling to
 	// remove events. No new contents will be written, but pages will be freed
 	// and the queue root page being updated.
-	BeginCleanup() *txfile.Tx
+	BeginCleanup() (*txfile.Tx, error)
 }
 
 // standaloneDelegate wraps a txfile.File into a standalone queue only file.
@@ -56,7 +56,10 @@ type standaloneDelegate struct {
 // NewStandaloneDelegate creates a standaonle Delegate from an txfile.File
 // instance.  This function will allocate and initialize the queue root page.
 func NewStandaloneDelegate(f *txfile.File) (Delegate, error) {
-	tx := f.Begin()
+	tx, err := f.Begin()
+	if err != nil {
+		return nil, err
+	}
 	defer tx.Close()
 
 	root := tx.Root()
@@ -106,20 +109,20 @@ func (d *standaloneDelegate) SplitOffset(offset uintptr) (txfile.PageID, uintptr
 }
 
 // BeginWrite creates a new transaction for flushing the write buffers to disk.
-func (d *standaloneDelegate) BeginWrite() *txfile.Tx {
+func (d *standaloneDelegate) BeginWrite() (*txfile.Tx, error) {
 	return d.file.BeginWith(txfile.TxOptions{
 		WALLimit: 3,
 	})
 }
 
 // BeginRead returns a readonly transaction.
-func (d *standaloneDelegate) BeginRead() *txfile.Tx {
+func (d *standaloneDelegate) BeginRead() (*txfile.Tx, error) {
 	return d.file.BeginReadonly()
 }
 
 // BeginCleanup creates a new write transaction configured for cleaning up used
 // events/pages only.
-func (d *standaloneDelegate) BeginCleanup() *txfile.Tx {
+func (d *standaloneDelegate) BeginCleanup() (*txfile.Tx, error) {
 	return d.file.BeginWith(txfile.TxOptions{
 		EnableOverflowArea: true,
 		WALLimit:           3,

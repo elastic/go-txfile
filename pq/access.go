@@ -47,7 +47,10 @@ func makeAccess(delegate Delegate) (access, error) {
 func (a *access) ReadRoot() ([SzRoot]byte, error) {
 	var buf [SzRoot]byte
 
-	tx := a.BeginRead()
+	tx, err := a.BeginRead()
+	if err != nil {
+		return buf, err
+	}
 	defer tx.Close()
 
 	return buf, withPage(tx, a.rootID, func(page []byte) error {

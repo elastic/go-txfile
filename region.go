@@ -137,8 +137,8 @@ func (r region) EachPage(fn func(PageID)) {
 	}
 }
 
-func (l region) PageIDs() (ids idList) {
-	l.EachPage(ids.Add)
+func (r region) PageIDs() (ids idList) {
+	r.EachPage(ids.Add)
 	return
 }
 

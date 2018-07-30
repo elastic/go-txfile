@@ -89,17 +89,16 @@ const magic uint32 = 0xBEA77AEB
 const version uint32 = 1
 
 func init() {
-	checkPacked := func(t reflect.Type) error {
+	checkPacked := func(t reflect.Type) {
 		off := uintptr(0)
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
 			if f.Offset != off {
-				return fmt.Errorf("field %v offset mismatch (expected=%v, actual=%v)",
-					f.Name, off, f.Offset)
+				panic(fmt.Sprintf("field %v offset mismatch (expected=%v, actual=%v)",
+					f.Name, off, f.Offset))
 			}
 			off += f.Type.Size()
 		}
-		return nil
 	}
 
 	// check compiler really generates packed structes. Required, so file can be
@@ -128,15 +127,15 @@ func (m *metaPage) Finalize() {
 	m.checksum.Set(m.computeChecksum())
 }
 
-func (m *metaPage) Validate() error {
+func (m *metaPage) Validate() reason {
 	if m.magic.Get() != magic {
-		return errMagic
+		return errOf(InvalidMetaPage).report("invalid magic number")
 	}
 	if m.version.Get() != version {
-		return errVersion
+		return errOf(InvalidMetaPage).report("invalid version number")
 	}
 	if m.checksum.Get() != m.computeChecksum() {
-		return errChecksum
+		return errOf(InvalidMetaPage).report("checksum mismatch")
 	}
 
 	return nil

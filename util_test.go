@@ -63,8 +63,8 @@ func TestInternalHelpers(t *testing.T) {
 func TestPagingWriter(t *testing.T) {
 	assert := newAssertions(t)
 
-	recordPages := func(ids *idList, pages *[][]byte) func(PageID, []byte) error {
-		return func(id PageID, buf []byte) error {
+	recordPages := func(ids *idList, pages *[][]byte) func(PageID, []byte) reason {
+		return func(id PageID, buf []byte) reason {
 			*ids, *pages = append(*ids, id), append(*pages, buf)
 			return nil
 		}

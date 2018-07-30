@@ -78,7 +78,10 @@ func (a *acker) handle(n uint) error {
 
 	// start write transaction to free pages and update the next read offset in
 	// the queue root
-	tx := a.accessor.BeginCleanup()
+	tx, err := a.accessor.BeginCleanup()
+	if err != nil {
+		return err
+	}
 	defer tx.Close()
 
 	traceln("acker: free data pages:", len(state.free))
@@ -124,7 +127,10 @@ func (a *acker) handle(n uint) error {
 // initACK uses a read-transaction to collect pages to be removed from list and
 // find offset of next read required to start reading the next un-acked event.
 func (a *acker) initACK(n uint) (ackState, error) {
-	tx := a.accessor.BeginRead()
+	tx, err := a.accessor.BeginRead()
+	if err != nil {
+		return ackState{}, err
+	}
 	defer tx.Close()
 
 	hdr, err := a.accessor.RootHdr(tx)
@@ -288,7 +294,10 @@ func (a *acker) findNewStartPositions(c *txCursor, id uint64) (head, read positi
 
 // Active returns the total number of active, not yet ACKed events.
 func (a *acker) Active() (uint, error) {
-	tx := a.accessor.BeginRead()
+	tx, err := a.accessor.BeginRead()
+	if err != nil {
+		return 0, err
+	}
 	defer tx.Close()
 
 	hdr, err := a.accessor.RootHdr(tx)

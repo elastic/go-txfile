@@ -37,7 +37,10 @@ func withPage(tx *txfile.Tx, id txfile.PageID, fn func([]byte) error) error {
 }
 
 func readPageByID(accessor *access, pool *pagePool, id txfile.PageID) (*page, error) {
-	tx := accessor.BeginRead()
+	tx, err := accessor.BeginRead()
+	if err != nil {
+		return nil, err
+	}
 	defer tx.Close()
 
 	var page *page

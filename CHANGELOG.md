@@ -9,6 +9,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - Add `Flags` to txfile.Options. PR #5
 - Add support to increase a file's maxSize on open. PR #5
 - Add support to pre-allocate the meta area. PR #7
+- Begin returns an error if transaction is not compatible to file open mode. PR #17
+- Introduce Error type to txfile package. PR #17
 
 ### Changed
 - Refine platform dependent file syncing. PR #10

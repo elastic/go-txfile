@@ -1059,6 +1059,24 @@ func (f *testFile) checkConsistency() bool {
 	return ok
 }
 
+func (f *testFile) BeginWith(opts TxOptions) *Tx {
+	tx, err := f.File.BeginWith(opts)
+	f.assert.FatalOnError(err)
+	return tx
+}
+
+func (f *testFile) Begin() *Tx {
+	tx, err := f.File.Begin()
+	f.assert.FatalOnError(err)
+	return tx
+}
+
+func (f *testFile) BeginReadonly() *Tx {
+	tx, err := f.File.BeginReadonly()
+	f.assert.FatalOnError(err)
+	return tx
+}
+
 func (f *testFile) withTx(write bool, fn func(tx *Tx)) {
 	tx := f.BeginWith(TxOptions{Readonly: !write})
 	defer func() {

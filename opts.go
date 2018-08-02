@@ -17,8 +17,6 @@
 
 package txfile
 
-import "fmt"
-
 // Options provides common file options used when opening or creating a file.
 type Options struct {
 	// Additional flags.
@@ -69,13 +67,15 @@ const (
 
 // Validate checks if all fields in Options are consistent with the File implementation.
 func (o *Options) Validate() error {
-	if o.Flags.Check(FlagUpdMaxSize) {
+	if o.Flags.check(FlagUpdMaxSize) {
 		if o.Readonly {
-			return errReadOnlyUpdateSize
+			return errOf(InvalidConfig).
+				report("can not update max size on in readonly mode")
 		}
 
-		if !o.Flags.Check(FlagUnboundMaxSize) && o.MaxSize > 0 && o.MaxSize < minRequiredFileSize {
-			return fmt.Errorf("max size must be at least %v bytes ", minRequiredFileSize)
+		if !o.Flags.check(FlagUnboundMaxSize) && o.MaxSize > 0 && o.MaxSize < minRequiredFileSize {
+			return errOf(InvalidConfig).
+				reportf("max size must be at least %v bytes ", minRequiredFileSize)
 		}
 	}
 
@@ -84,14 +84,26 @@ func (o *Options) Validate() error {
 		totalPages := o.MaxSize / uint64(o.PageSize)
 		avail := totalPages - headerPages
 		if uint64(metaSz) >= avail {
-			return fmt.Errorf("meta area of %v pages exceeds the available pages %v",
-				metaSz, avail)
+			return errOf(InvalidConfig).
+				reportf("meta area of %v pages exceeds the available pages %v", metaSz, avail)
+		}
+	}
+
+	if o.PageSize != 0 {
+		if !isPowerOf2(uint64(o.PageSize)) {
+			return errOf(InvalidConfig).
+				reportf("pageSize %v is not power of 2", o.PageSize)
+		}
+
+		if o.PageSize < minPageSize {
+			return errOf(InvalidConfig).
+				reportf("pageSize must be >= %v", minPageSize)
 		}
 	}
 
 	return nil
 }
 
-func (f Flag) Check(check Flag) bool {
+func (f Flag) check(check Flag) bool {
 	return (f & check) == check
 }

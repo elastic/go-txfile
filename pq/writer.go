@@ -184,7 +184,10 @@ func (w *Writer) doFlush() error {
 		}
 	}
 
-	tx := w.accessor.BeginWrite()
+	tx, err := w.accessor.BeginWrite()
+	if err != nil {
+		return err
+	}
 	defer tx.Close()
 
 	rootPage, queueHdr, err := w.accessor.LoadRootPage(tx)

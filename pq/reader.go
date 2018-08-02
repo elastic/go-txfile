@@ -62,11 +62,16 @@ func (r *Reader) Available() uint {
 		return 0
 	}
 
+	var err error
 	func() {
-		tx := r.accessor.BeginRead()
+		var tx *txfile.Tx
+		tx, err = r.accessor.BeginRead()
 		defer tx.Close()
-		r.updateQueueState(tx)
+		err = r.updateQueueState(tx)
 	}()
+	if err != nil {
+		return 0
+	}
 
 	if r.state.cursor.Nil() {
 		return 0
@@ -77,11 +82,18 @@ func (r *Reader) Available() uint {
 
 // Begin starts a new read transaction, shared between multiple read calls.
 // User must execute Done, to close the file transaction.
-func (r *Reader) Begin() {
+func (r *Reader) Begin() error {
 	if r.tx != nil {
 		r.tx.Close()
 	}
-	r.tx = r.accessor.BeginRead()
+
+	tx, err := r.accessor.BeginRead()
+	if err != nil {
+		return err
+	}
+
+	r.tx = tx
+	return nil
 }
 
 // Done closes the active read transaction.
@@ -115,7 +127,11 @@ func (r *Reader) Read(b []byte) (int, error) {
 func (r *Reader) readInto(to []byte) ([]byte, error) {
 	tx := r.tx
 	if tx == nil {
-		tx = r.accessor.BeginRead()
+		var err error
+		tx, err = r.accessor.BeginRead()
+		if err != nil {
+			return nil, err
+		}
 		defer tx.Close()
 	}
 
@@ -164,7 +180,11 @@ func (r *Reader) Next() (int, error) {
 
 	tx := r.tx
 	if tx == nil {
-		tx = r.accessor.BeginRead()
+		var err error
+		tx, err = r.accessor.BeginRead()
+		if err != nil {
+			return -1, err
+		}
 		defer tx.Close()
 	}
 

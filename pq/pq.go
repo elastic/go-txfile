@@ -134,7 +134,10 @@ func (q *Queue) Close() error {
 
 // Pending returns the total number of enqueued, but unacked events.
 func (q *Queue) Pending() int {
-	tx := q.accessor.BeginRead()
+	tx, err := q.accessor.BeginRead()
+	if err != nil {
+		return -1
+	}
 	defer tx.Close()
 
 	hdr, err := q.accessor.RootHdr(tx)

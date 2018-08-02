@@ -55,7 +55,7 @@ type syncMsg struct {
 }
 
 type txWriteSync struct {
-	err error
+	err reason
 	wg  sync.WaitGroup
 }
 
@@ -137,9 +137,9 @@ func (w *writer) Sync(sync *txWriteSync, flags syncFlag) {
 	w.cond.Signal()
 }
 
-func (w *writer) Run() (bool, error) {
+func (w *writer) Run() (bool, reason) {
 	var (
-		err  error
+		err  reason
 		done bool
 		cmd  command
 		buf  [1024]writeMsg
@@ -159,12 +159,14 @@ func (w *writer) Run() (bool, error) {
 			return msgs[i].id < msgs[j].id
 		})
 		for _, msg := range msgs {
+			const op = "txfile/write-page"
+
 			if err == nil {
 				// execute actual write on the page it's file offset:
 				off := uint64(msg.id) * uint64(w.pageSize)
 				tracef("write at(id=%v, off=%v, len=%v)\n", msg.id, off, len(msg.buf))
 
-				err = writeAt(w.target, msg.buf, int64(off))
+				err = writeAt(op, w.target, msg.buf, int64(off))
 			}
 
 			msg.sync.err = err
@@ -173,6 +175,8 @@ func (w *writer) Run() (bool, error) {
 
 		// execute pending fsync:
 		if fsync := cmd.fsync; fsync != nil {
+			const op = "txfile/write-sync"
+
 			resetErr := cmd.syncFlags.Test(syncResetErr)
 			if err == nil {
 				syncFlag := vfs.SyncAll
@@ -180,7 +184,9 @@ func (w *writer) Run() (bool, error) {
 					syncFlag = vfs.SyncDataOnly
 				}
 
-				err = w.target.Sync(syncFlag)
+				if syncErr := w.target.Sync(syncFlag); syncErr != nil {
+					err = errOp(op).causedBy(syncErr)
+				}
 			}
 			fsync.err = err
 
@@ -273,16 +279,17 @@ func (s *txWriteSync) Release() {
 	s.wg.Done()
 }
 
-func (s *txWriteSync) Wait() error {
+func (s *txWriteSync) Wait() reason {
 	s.wg.Wait()
 	return s.err
 }
 
-func writeAt(out io.WriterAt, buf []byte, off int64) error {
+func writeAt(op string, out io.WriterAt, buf []byte, off int64) reason {
 	for len(buf) > 0 {
 		n, err := out.WriteAt(buf, off)
 		if err != nil {
-			return err
+			return errOp(op).causedBy(err).
+				reportf("writing %v bytes to off=%v failed", len(buf), off)
 		}
 
 		off += int64(n)

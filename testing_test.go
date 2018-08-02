@@ -101,7 +101,7 @@ func makeCloseWait(timeout time.Duration) closeWaiter {
 func (w *closeWaiter) Add(n int) { w.wg.Add(n) }
 func (w *closeWaiter) Done()     { w.wg.Done() }
 func (w *closeWaiter) Wait() bool {
-	err := waitFn(w.duration, func() error {
+	err := waitFn(w.duration, func() reason {
 		w.wg.Wait()
 		return nil
 	})
@@ -128,7 +128,7 @@ func (p *testPageStore) Get(id PageID) []byte {
 	return b
 }
 
-func (p *testPageStore) Set(id PageID, b []byte) error {
+func (p *testPageStore) Set(id PageID, b []byte) reason {
 	if id < 2 {
 		panic("must not overwrite file meta region")
 	}
@@ -136,7 +136,7 @@ func (p *testPageStore) Set(id PageID, b []byte) error {
 	return nil
 }
 
-func waitFn(timeout time.Duration, fn func() error) error {
+func waitFn(timeout time.Duration, fn func() reason) error {
 	ch := make(chan error)
 	go func() {
 		ch <- fn()

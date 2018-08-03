@@ -77,7 +77,7 @@ type txFlags struct {
 	checkpoint bool // mark wal checkpoint has been applied
 }
 
-func newTx(file *File, id uint, lock sync.Locker, settings TxOptions) *Tx {
+func newTx(file *File, id uint64, lock sync.Locker, settings TxOptions) *Tx {
 	meta := file.getMetaPage()
 	invariant.Check(meta != nil, "file meta is not set")
 

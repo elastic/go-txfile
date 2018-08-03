@@ -28,26 +28,14 @@ func getPage(tx *txfile.Tx, id txfile.PageID) ([]byte, error) {
 	return page.Bytes()
 }
 
-func withPage(tx *txfile.Tx, id txfile.PageID, fn func([]byte) error) error {
+func withPage(tx *txfile.Tx, id txfile.PageID, fn func([]byte)) error {
 	page, err := getPage(tx, id)
 	if err != nil {
 		return err
 	}
-	return fn(page)
-}
 
-func readPageByID(accessor *access, pool *pagePool, id txfile.PageID) (*page, error) {
-	tx, err := accessor.BeginRead()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Close()
-
-	var page *page
-	return page, withPage(tx, id, func(buf []byte) error {
-		page = pool.NewPageWith(id, buf)
-		return nil
-	})
+	fn(page)
+	return nil
 }
 
 func idLess(a, b uint64) bool {

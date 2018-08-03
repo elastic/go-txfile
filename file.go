@@ -23,9 +23,9 @@ import (
 	"math/bits"
 	"os"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
-	"github.com/elastic/beats/libbeat/common/atomic"
 	"github.com/elastic/go-txfile/internal/cleanup"
 	"github.com/elastic/go-txfile/internal/invariant"
 	"github.com/elastic/go-txfile/internal/vfs"
@@ -53,7 +53,7 @@ type File struct {
 	meta       [2]*metaPage
 	metaActive int
 
-	txids atomic.Uint
+	txids uint64
 }
 
 // internal contants
@@ -299,7 +299,9 @@ func (f *File) beginTx(settings TxOptions) (*Tx, reason) {
 	lock := f.locks.TxLock(settings.Readonly)
 	lock.Lock()
 	tracef("init new transaction (readonly: %v)\n", settings.Readonly)
-	tx := newTx(f, f.txids.Inc(), lock, settings)
+
+	txid := atomic.AddUint64(&f.txids, 1)
+	tx := newTx(f, txid, lock, settings)
 	tracef("begin transaction: %p (readonly: %v)\n", tx, settings.Readonly)
 	return tx, nil
 }

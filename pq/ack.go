@@ -204,9 +204,9 @@ func (a *acker) collectFreePages(c *txCursor, endID uint64) ([]txfile.PageID, bo
 	)
 
 	for {
-		hdr, err := c.PageHeader(op)
+		hdr, err := c.PageHeader()
 		if err != nil {
-			return nil, false, err
+			return nil, false, a.errWrap(op, err)
 		}
 
 		// stop searching if endID is in the current page
@@ -253,9 +253,9 @@ func (a *acker) findNewStartPositions(c *txCursor, id uint64) (head, read positi
 
 	var hdr *eventPage
 
-	hdr, err = c.PageHeader(op)
+	hdr, err = c.PageHeader()
 	if err != nil {
-		return
+		return head, read, a.errWrap(op, err)
 	}
 
 	head = position{
@@ -266,22 +266,21 @@ func (a *acker) findNewStartPositions(c *txCursor, id uint64) (head, read positi
 
 	if id == head.id {
 		read = head
-		return
+		return head, read, nil
 	}
 
 	// skip contents in current page until we did reach start of next event.
 	c.cursor.off = head.off
 	for currentID := head.id; currentID != id; currentID++ {
 		var evtHdr *eventHeader
-		evtHdr, err = c.ReadEventHeader(op)
+		evtHdr, err = c.ReadEventHeader()
 		if err != nil {
-			return
+			return head, read, a.errWrap(op, err)
 		}
 
 		err = c.Skip(int(evtHdr.sz.Get()))
 		if err != nil {
-			err = a.errWrap(op, err)
-			return
+			return head, read, a.errWrap(op, err)
 		}
 	}
 
@@ -290,7 +289,7 @@ func (a *acker) findNewStartPositions(c *txCursor, id uint64) (head, read positi
 		off:  c.cursor.off,
 		id:   id,
 	}
-	return
+	return head, read, nil
 }
 
 // Active returns the total number of active, not yet ACKed events.

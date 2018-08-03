@@ -60,21 +60,21 @@ func (r *Reader) close() {
 func (r *Reader) Available() (uint, error) {
 	const op = "pq/reader-available"
 
-	if err := r.canRead(op); err != nil {
-		return 0, err
+	if err := r.canRead(); err != NoError {
+		return 0, r.errOf(op, err)
 	}
 
 	var err reason
 	func() {
 		var tx *txfile.Tx
-		tx, err = r.beginTx(op)
+		tx, err = r.beginTx()
 		if err == nil {
 			defer tx.Close()
-			err = r.updateQueueState(op, tx)
+			err = r.updateQueueState(tx)
 		}
 	}()
 	if err != nil {
-		return 0, err
+		return 0, r.errWrap(op, err)
 	}
 
 	if r.state.cursor.Nil() {
@@ -93,13 +93,13 @@ func (r *Reader) Begin() error {
 		r.tx.Close()
 	}
 
-	if err := r.canRead(op); err != nil {
-		return err
+	if err := r.canRead(); err != NoError {
+		return r.errOf(op, err)
 	}
 
-	tx, err := r.beginTx(op)
+	tx, err := r.beginTx()
 	if err != nil {
-		return err
+		return r.errWrap(op, err)
 	}
 
 	r.tx = tx
@@ -124,22 +124,26 @@ func (r *Reader) Done() {
 func (r *Reader) Read(b []byte) (int, error) {
 	const op = "pq/read-event"
 
-	if err := r.canRead(op); err != nil {
-		return -1, err
+	if err := r.canRead(); err != NoError {
+		return -1, r.errOf(op, err)
 	}
 
 	if r.state.eventBytes <= 0 {
 		return 0, nil
 	}
 
-	to, err := r.readInto(op, b)
-	return len(b) - len(to), err
+	to, err := r.readInto(b)
+	n := len(b) - len(to)
+	if err != nil {
+		return n, r.errWrap(op, err)
+	}
+	return len(b) - len(to), nil
 }
 
-func (r *Reader) readInto(op string, to []byte) ([]byte, reason) {
+func (r *Reader) readInto(to []byte) ([]byte, reason) {
 	tx := r.tx
 	if tx == nil {
-		t, err := r.beginTx(op)
+		t, err := r.beginTx()
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +165,7 @@ func (r *Reader) readInto(op string, to []byte) ([]byte, reason) {
 		r.state.eventBytes -= consumed
 
 		if err != nil {
-			return to, r.errWrap(op, err)
+			return to, err
 		}
 	}
 
@@ -175,9 +179,6 @@ func (r *Reader) readInto(op string, to []byte) ([]byte, reason) {
 		// next page if no more new event fits into current page.
 		if cursor.PageBytes() < szEventHeader {
 			_, err = cursor.AdvancePage()
-			if err != nil {
-				err = r.errWrap(op, err)
-			}
 		}
 	}
 
@@ -192,15 +193,15 @@ func (r *Reader) readInto(op string, to []byte) ([]byte, reason) {
 func (r *Reader) Next() (int, error) {
 	const op = "op/reader-next"
 
-	if err := r.canRead(op); err != nil {
-		return -1, err
+	if err := r.canRead(); err != NoError {
+		return -1, r.errOf(op, err)
 	}
 
 	tx := r.tx
 	if tx == nil {
-		t, err := r.beginTx(op)
+		t, err := r.beginTx()
 		if err != nil {
-			return -1, err
+			return -1, r.errWrap(op, err)
 		}
 
 		tx = t
@@ -223,9 +224,9 @@ func (r *Reader) Next() (int, error) {
 	// end of buffered queue state. Update state and check if we did indeed reach
 	// the end of the queue.
 	if cursor.Nil() || !idLess(r.state.id, r.state.endID) {
-		err := r.updateQueueState(op, tx)
+		err := r.updateQueueState(tx)
 		if err != nil {
-			return 0, err
+			return 0, r.errWrap(op, err)
 		}
 
 		// end of queue
@@ -245,9 +246,9 @@ func (r *Reader) Next() (int, error) {
 		}
 		invariant.Check(ok, "page list linkage broken")
 
-		hdr, err := cursor.PageHeader(op)
+		hdr, err := cursor.PageHeader()
 		if err != nil {
-			return 0, err
+			return 0, r.errWrap(op, err)
 		}
 
 		id := hdr.first.Get()
@@ -258,19 +259,21 @@ func (r *Reader) Next() (int, error) {
 	}
 
 	// Initialize next event read by determining event size.
-	hdr, err := cursor.ReadEventHeader(op)
+	hdr, err := cursor.ReadEventHeader()
 	if err != nil {
-		return 0, err
+		return 0, r.errWrap(op, err)
 	}
 	L := int(hdr.sz.Get())
 	r.state.eventBytes = L
 	return L, nil
 }
 
-func (r *Reader) updateQueueState(op string, tx *txfile.Tx) reason {
+func (r *Reader) updateQueueState(tx *txfile.Tx) reason {
+	const op = "pq/reader-update-queue-state"
+
 	root, err := r.accessor.RootHdr(tx)
 	if err != nil {
-		return err
+		return r.errWrap(op, err)
 	}
 
 	// Initialize cursor, if queue was empty on previous (without any pages).
@@ -296,24 +299,27 @@ func (r *Reader) findReadStart(root *queuePage) position {
 	return r.accessor.ParsePosition(&root.head)
 }
 
-func (r *Reader) beginTx(op string) (*txfile.Tx, reason) {
+func (r *Reader) beginTx() (*txfile.Tx, reason) {
 	tx, err := r.accessor.BeginRead()
 	if err != nil {
-		return nil, r.errWrap(op, err).report("failed to start read transaction")
+		return nil, r.errWrap("", err).report("failed to start read transaction")
 	}
 	return tx, nil
 }
 
-func (r *Reader) canRead(op string) reason {
+func (r *Reader) canRead() ErrKind {
 	if !r.active {
-		return r.err(op).of(ReaderClosed)
+		return ReaderClosed
 	}
-
-	return nil
+	return NoError
 }
 
 func (r *Reader) err(op string) *Error {
 	return &Error{op: op, ctx: r.errCtx()}
+}
+
+func (r *Reader) errOf(op string, kind ErrKind) *Error {
+	return r.err(op).of(kind)
 }
 
 func (r *Reader) errWrap(op string, cause error) *Error {

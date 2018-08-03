@@ -88,9 +88,9 @@ func New(delegate Delegate, settings Settings) (*Queue, error) {
 		return nil, errOp(op).of(InvalidParam).report("delegate must not be nil")
 	}
 
-	accessor, k := makeAccess(delegate)
-	if k != NoError {
-		return nil, errOp(op).of(k)
+	accessor, errKind := makeAccess(delegate)
+	if errKind != NoError {
+		return nil, errOp(op).of(errKind)
 	}
 
 	pageSize := delegate.PageSize()

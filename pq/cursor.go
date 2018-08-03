@@ -49,7 +49,9 @@ func makeTxCursor(tx *txfile.Tx, accessor *access, cursor *cursor) txCursor {
 	}
 }
 
-func (c *txCursor) init(op string) reason {
+func (c *txCursor) init() reason {
+	const op = "pq/cursor-init"
+
 	if c.page != nil {
 		return nil
 	}
@@ -67,16 +69,21 @@ func (c *txCursor) init(op string) reason {
 func (c *txCursor) Read(b []byte) (int, reason) {
 	const op = "pq/read-bytes"
 
-	if err := c.init(op); err != nil {
-		return 0, err
+	if err := c.init(); err != nil {
+		return 0, c.errWrap(op, err)
 	}
 
 	if c.Nil() {
 		return 0, nil
 	}
 
-	to, err := c.readInto(op, b)
-	return len(b) - len(to), err
+	to, err := c.readInto(b)
+	n := len(b) - len(to)
+
+	if err != nil {
+		err = c.errWrap(op, err)
+	}
+	return n, err
 }
 
 // Skip skips the next n bytes.
@@ -105,21 +112,18 @@ func (c *txCursor) Skip(n int) reason {
 	return nil
 }
 
-func (c *txCursor) readInto(op string, to []byte) ([]byte, reason) {
+func (c *txCursor) readInto(to []byte) ([]byte, reason) {
 	for len(to) > 0 {
 		// try to advance cursor to next page if last read did end at end of page
 		if c.PageBytes() == 0 {
 			ok, err := c.AdvancePage()
-			if !ok {
-				return to, nil
-			}
-			if err != nil {
-				return to, c.errWrap(op, err)
+			if !ok || err != nil {
+				return to, err
 			}
 		}
 
 		var n int
-		err := c.WithBytes(op, func(b []byte) { n = copy(to, b) })
+		err := c.WithBytes(func(b []byte) { n = copy(to, b) })
 		to = to[n:]
 		c.cursor.off += n
 		if err != nil {
@@ -130,25 +134,29 @@ func (c *txCursor) readInto(op string, to []byte) ([]byte, reason) {
 	return to, nil
 }
 
-func (c *txCursor) ReadEventHeader(op string) (hdr *eventHeader, err reason) {
-	err = c.WithBytes(op, func(b []byte) {
+func (c *txCursor) ReadEventHeader() (hdr *eventHeader, err reason) {
+	const op = "pq/cursor-read-event-header"
+
+	err = c.WithBytes(func(b []byte) {
 		hdr = castEventHeader(b)
 		c.off += szEventHeader
 	})
-	return
+
+	if err != nil {
+		err = c.errWrap(op, err)
+	}
+	return hdr, err
 }
 
-func (c *txCursor) PageHeader(op string) (hdr *eventPage, err reason) {
-	err = c.WithHdr(op, func(h *eventPage) {
-		hdr = h
-	})
+func (c *txCursor) PageHeader() (hdr *eventPage, err reason) {
+	err = c.WithHdr(func(h *eventPage) { hdr = h })
 	return
 }
 
 func (c *txCursor) AdvancePage() (ok bool, err reason) {
 	const op = "pq/cursor-next-page"
 
-	err = c.WithHdr(op, func(hdr *eventPage) {
+	err = c.WithHdr(func(hdr *eventPage) {
 		nextID := txfile.PageID(hdr.next.Get())
 		tracef("advance page from %v -> %v\n", c.cursor.page, nextID)
 		ok = nextID != 0
@@ -159,33 +167,47 @@ func (c *txCursor) AdvancePage() (ok bool, err reason) {
 			c.page = nil
 		}
 	})
-	return
+
+	if err != nil {
+		err = c.errWrap(op, err)
+	}
+	return ok, err
 }
 
-func (c *txCursor) WithPage(op string, fn func([]byte)) reason {
-	if err := c.init(op); err != nil {
+func (c *txCursor) WithPage(fn func([]byte)) reason {
+	if err := c.init(); err != nil {
 		return err
 	}
 
 	buf, err := c.page.Bytes()
 	if err != nil {
-		return c.errWrap(op, err).of(ReadFail)
+		return c.errWrap("", err).of(ReadFail)
 	}
 
 	fn(buf)
 	return nil
 }
 
-func (c *txCursor) WithHdr(op string, fn func(*eventPage)) reason {
-	return c.WithPage(op, func(b []byte) {
+func (c *txCursor) WithHdr(fn func(*eventPage)) reason {
+	const op = "pq/cursor-read-event-page-header"
+
+	err := c.WithPage(func(b []byte) {
 		fn(castEventPageHeader(b))
 	})
+	if err != nil {
+		return c.errWrap(op, err)
+	}
+	return nil
 }
 
-func (c *txCursor) WithBytes(op string, fn func([]byte)) reason {
-	return c.WithPage(op, func(b []byte) {
-		fn(b[c.off:])
-	})
+func (c *txCursor) WithBytes(fn func([]byte)) reason {
+	const op = "pq/cursor-access-page"
+
+	err := c.WithPage(func(b []byte) { fn(b[c.off:]) })
+	if err != nil {
+		return c.errWrap(op, err)
+	}
+	return nil
 }
 
 // PageBytes reports the amount of bytes still available in current page

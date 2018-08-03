@@ -106,9 +106,9 @@ func (w *Writer) close() error {
 		return nil
 	}
 
-	err := w.doFlush(op)
+	err := w.doFlush()
 	if err != nil {
-		return err
+		return w.errWrap(op, err)
 	}
 
 	w.active = false
@@ -119,13 +119,13 @@ func (w *Writer) close() error {
 func (w *Writer) Write(p []byte) (int, error) {
 	const op = "pq/write"
 
-	if err := w.canWrite(op); err != nil {
-		return 0, err
+	if err := w.canWrite(); err != NoError {
+		return 0, w.errOf(op, err)
 	}
 
 	if w.state.buf.Avail() <= len(p) {
-		if err := w.doFlush(op); err != nil {
-			return 0, err
+		if err := w.doFlush(); err != nil {
+			return 0, w.errWrap(op, err)
 		}
 	}
 
@@ -142,8 +142,8 @@ func (w *Writer) Write(p []byte) (int, error) {
 func (w *Writer) Next() error {
 	const op = "pq/writer-next"
 
-	if err := w.canWrite(op); err != nil {
-		return err
+	if err := w.canWrite(); err != NoError {
+		return w.errOf(op, err)
 	}
 
 	// finalize current event in buffer and prepare next event
@@ -157,8 +157,8 @@ func (w *Writer) Next() error {
 
 	// check if we need to flush
 	if w.state.buf.Avail() <= szEventHeader {
-		if err := w.doFlush(op); err != nil {
-			return err
+		if err := w.doFlush(); err != nil {
+			return w.errWrap(op, err)
 		}
 	}
 
@@ -170,13 +170,18 @@ func (w *Writer) Next() error {
 func (w *Writer) Flush() error {
 	const op = "pq/writer-flush"
 
-	if err := w.canWrite(op); err != nil {
-		return err
+	if err := w.canWrite(); err != NoError {
+		return w.errOf(op, err)
 	}
-	return w.doFlush(op)
+
+	if err := w.doFlush(); err != nil {
+		return w.errWrap(op, err)
+	}
+
+	return nil
 }
 
-func (w *Writer) doFlush(op string) error {
+func (w *Writer) doFlush() error {
 	start, end := w.state.buf.Pages()
 	if start == nil || start == end {
 		return nil
@@ -196,13 +201,13 @@ func (w *Writer) doFlush(op string) error {
 
 	tx, txErr := w.accessor.BeginWrite()
 	if txErr != nil {
-		return w.errWrap(op, txErr)
+		return w.errWrap("", txErr)
 	}
 	defer tx.Close()
 
 	rootPage, queueHdr, err := w.accessor.LoadRootPage(tx)
 	if err != nil {
-		return w.errWrap(op, err)
+		return w.errWrap("", err)
 	}
 
 	traceQueueHeader(queueHdr)
@@ -210,7 +215,7 @@ func (w *Writer) doFlush(op string) error {
 	ok := false
 	allocN, txErr := allocatePages(tx, unallocated, end)
 	if txErr != nil {
-		return w.errWrap(op, txErr)
+		return w.errWrap("", txErr)
 	}
 	linkPages(start, end)
 	defer cleanup.IfNot(&ok, func() { unassignPages(unallocated, end) })
@@ -218,7 +223,7 @@ func (w *Writer) doFlush(op string) error {
 	traceln("write queue pages")
 	last, txErr := flushPages(tx, start, end)
 	if txErr != nil {
-		return w.errWrap(op, txErr)
+		return w.errWrap("", txErr)
 	}
 
 	// update queue root
@@ -227,7 +232,7 @@ func (w *Writer) doFlush(op string) error {
 
 	txErr = tx.Commit()
 	if txErr != nil {
-		return w.errWrap(op, txErr)
+		return w.errWrap("", txErr)
 	}
 
 	// mark write as success -> no error-cleanup required
@@ -282,16 +287,20 @@ func (w *Writer) updateRootHdr(hdr *queuePage, start, last *page, allocated int)
 	traceQueueHeader(hdr)
 }
 
-func (w *Writer) canWrite(op string) reason {
+func (w *Writer) canWrite() ErrKind {
 	if !w.active {
-		return w.err(op).of(WriterClosed)
+		return WriterClosed
 	}
-	return nil
+	return NoError
 }
 
 func (w *Writer) err(op string) *Error { return w.errPage(op, 0) }
 func (w *Writer) errPage(op string, page txfile.PageID) *Error {
 	return &Error{op: op, ctx: w.errPageCtx(page)}
+}
+
+func (w *Writer) errOf(op string, kind ErrKind) *Error {
+	return w.err(op).of(kind)
 }
 
 func (w *Writer) errWrap(op string, cause error) *Error { return w.errWrapPage(op, cause, 0) }

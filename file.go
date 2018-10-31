@@ -36,6 +36,8 @@ import (
 // pages of type PageSize. Pages within the file are only accessible by page IDs
 // from within active transactions.
 type File struct {
+	observer Observer
+
 	path      string
 	readonly  bool
 	file      vfs.File
@@ -52,6 +54,8 @@ type File struct {
 	// meta pages
 	meta       [2]*metaPage
 	metaActive int
+
+	stats FileStats
 
 	txids uint64
 }
@@ -99,6 +103,8 @@ func Open(path string, mode os.FileMode, opts Options) (*File, error) {
 
 	tracef("open file: %p (%v)\n", f, path)
 	traceMetaPage(f.getMetaPage())
+
+	f.reportOpen()
 	return f, nil
 }
 
@@ -226,6 +232,36 @@ func (f *File) init(metaActive int, opts Options) reason {
 	return nil
 }
 
+func (f *File) reportOpen() {
+	const numFileHeaders = 2
+
+	meta := f.getMetaPage()
+	fileEnd := uint(meta.dataEndMarker.Get())
+	if m := uint(meta.metaEndMarker.Get()); m > fileEnd {
+		fileEnd = m
+	}
+
+	metaArea := uint(meta.metaTotal.Get())
+	metaInUse := metaArea - f.allocator.meta.freelist.Avail()
+	dataInUse := fileEnd - numFileHeaders - metaArea
+
+	f.stats = FileStats{
+		Version:       meta.version.Get(),
+		Size:          uint64(f.size),
+		MaxSize:       meta.maxSize.Get(),
+		PageSize:      meta.pageSize.Get(),
+		MetaArea:      metaArea,
+		DataAllocated: dataInUse,
+		MetaAllocated: metaInUse,
+	}
+
+	o := f.observer
+	if o == nil {
+		return
+	}
+	o.OnOpen(f.stats)
+}
+
 // Close closes the file, after all transactions have been quit. After closing
 // a file, no more transactions can be started.
 func (f *File) Close() error {
@@ -303,6 +339,8 @@ func (f *File) beginTx(settings TxOptions) (*Tx, reason) {
 	txid := atomic.AddUint64(&f.txids, 1)
 	tx := newTx(f, txid, lock, settings)
 	tracef("begin transaction: %p (readonly: %v)\n", tx, settings.Readonly)
+
+	tx.onBegin()
 	return tx, nil
 }
 

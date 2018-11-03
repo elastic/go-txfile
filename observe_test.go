@@ -89,6 +89,8 @@ func TestObserveStats(t *testing.T) {
 				inuse = append(inuse, page.ID())
 				page.SetBytes([]byte{1, 2, 3, 4})
 			}
+
+			time.Sleep(500 * time.Millisecond)
 			assert.NoError(tx.Commit())
 
 			// validate last tx stats
@@ -129,6 +131,8 @@ func TestObserveStats(t *testing.T) {
 				assert.NoError(p.Free())
 			}
 			inuse = inuse[2:]
+
+			time.Sleep(500 * time.Millisecond)
 			assert.NoError(tx.Commit())
 
 			// validate
@@ -190,6 +194,8 @@ func TestObserveStats(t *testing.T) {
 					assert.NoError(err)
 				}
 			}
+
+			time.Sleep(500 * time.Millisecond)
 		})
 		if assert.Failed() {
 			return
@@ -223,6 +229,8 @@ func TestObserveStats(t *testing.T) {
 			page.SetBytes([]byte{1, 2, 3, 4})
 		}
 		assert.NoError(tx.Flush())
+
+		time.Sleep(500 * time.Millisecond)
 		assert.NoError(tx.Rollback()) // rollback after write
 
 		// validate
@@ -273,9 +281,10 @@ func checkTxStat(assert *assertions, expected TxStats, actual statEntry, msg ...
 	txActual := actual.tx
 
 	assert.Equal(statOnTxClose, actual.kind, "invalid stat type")
-	assert.True(txActual.Duration > 0, "duration should not be 0")
 
+	assert.True(txActual.Duration > 0, "duration should not be 0")
 	txActual.Duration = 0
+
 	assert.Equal(expected, txActual, msg...)
 }
 

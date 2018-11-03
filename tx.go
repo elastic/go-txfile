@@ -175,7 +175,7 @@ func (tx *Tx) onCommit() {
 	allocStats := &tx.alloc.stats
 
 	fileStats := &tx.file.stats
-	fileStats.Size = uint64(tx.file.size)
+	fileStats.Size = uint64(tx.file.sizeEstimate)
 	fileStats.MetaArea = tx.file.allocator.metaTotal
 	fileStats.MetaAllocated = tx.file.allocator.metaTotal - tx.file.allocator.meta.freelist.Avail()
 	fileStats.DataAllocated += allocStats.data.alloc - allocStats.data.freed - allocStats.toMeta
@@ -404,6 +404,8 @@ func (tx *Tx) finishWith(fn func() reason) reason {
 
 	if !tx.flags.readonly {
 		return fn()
+	} else {
+		tx.onClose()
 	}
 	return nil
 }
@@ -547,6 +549,13 @@ func (tx *Tx) tryCommitChanges() reason {
 		err = tx.file.truncate(requiredFileSz)
 	} else if int(expectedMMapSize) > len(tx.file.mapped) {
 		err = tx.file.mmapUpdate()
+	} else {
+		sz := expectedMMapSize
+		if sz < tx.file.size {
+			sz = tx.file.size
+		}
+
+		tx.file.sizeEstimate = sz
 	}
 	if err != nil {
 		return err
@@ -722,11 +731,8 @@ func (tx *Tx) scheduleWrite(id PageID, buf []byte) reason {
 //        - Truncate file only if pages in overflow area have been allocated.
 //        - If maxSize == 0, truncate file to old end marker.
 func (tx *Tx) rollbackChanges() {
-	if tx.Readonly() {
-		tx.onClose()
-	} else {
-		tx.onRollback()
-	}
+	tracef("rollback changes in transaction: %p\n", tx)
+	tx.onRollback()
 
 	tx.file.allocator.Rollback(&tx.alloc)
 

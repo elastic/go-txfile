@@ -38,10 +38,13 @@ import (
 type File struct {
 	observer Observer
 
-	path      string
-	readonly  bool
-	file      vfs.File
-	size      int64 // real file size
+	path     string
+	readonly bool
+	file     vfs.File
+
+	size         int64 // real file size (updated on mmap update only)
+	sizeEstimate int64 // estimated real file size based on last update and the total vs. used mmaped region
+
 	locks     lock
 	wg        sync.WaitGroup // local async workers wait group
 	writer    writer
@@ -185,6 +188,7 @@ func newFile(
 			maxSize:  maxSize,
 			pageSize: pageSize,
 		},
+		observer: opts.Observer,
 	}
 	f.locks.init()
 
@@ -243,7 +247,7 @@ func (f *File) reportOpen() {
 
 	metaArea := uint(meta.metaTotal.Get())
 	metaInUse := metaArea - f.allocator.meta.freelist.Avail()
-	dataInUse := fileEnd - numFileHeaders - metaArea
+	dataInUse := fileEnd - numFileHeaders - metaArea - f.allocator.data.freelist.Avail()
 
 	f.stats = FileStats{
 		Version:       meta.version.Get(),
@@ -421,6 +425,7 @@ func (f *File) mmap() reason {
 		return f.err(op).of(InvalidFileSize).report(msg)
 	}
 	f.size = fileSize
+	f.sizeEstimate = fileSize // reset estimate
 
 	maxSize := f.allocator.maxSize
 	if em := uint(f.allocator.meta.endMarker); maxSize > 0 && em > f.allocator.maxPages {

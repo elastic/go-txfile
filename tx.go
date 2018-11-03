@@ -402,12 +402,12 @@ func (tx *Tx) finishWith(fn func() reason) reason {
 	}
 	defer tx.close()
 
-	if !tx.flags.readonly {
-		return fn()
-	} else {
+	if tx.flags.readonly {
 		tx.onClose()
+		return nil
 	}
-	return nil
+
+	return fn()
 }
 
 func (tx *Tx) close() {

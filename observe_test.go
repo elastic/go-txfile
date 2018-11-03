@@ -34,9 +34,9 @@ type statEntry struct {
 type statKind uint8
 
 const (
-	kOnOpen statKind = iota
-	kOnTxBegin
-	kOnTxClose
+	statOnOpen statKind = iota
+	statOnTxBegin
+	statOnTxClose
 )
 
 type testObserveLast statEntry
@@ -77,7 +77,7 @@ func TestObserveStats(t *testing.T) {
 		var inuse []PageID
 		{
 			tx := f.Begin()
-			assert.Equal(kOnTxBegin, stat.kind)
+			assert.Equal(statOnTxBegin, stat.kind)
 			defer tx.Close()
 
 			// allocate + commit
@@ -116,7 +116,7 @@ func TestObserveStats(t *testing.T) {
 		// 2. transaction releasing the first 2 allocated pages -> force meta data
 		{
 			tx := f.Begin()
-			assert.Equal(kOnTxBegin, stat.kind)
+			assert.Equal(statOnTxBegin, stat.kind)
 			defer tx.Close()
 
 			// free first 2 allocated pages + commit
@@ -211,7 +211,7 @@ func TestObserveStats(t *testing.T) {
 		defer teardown()
 
 		tx := f.Begin()
-		assert.Equal(kOnTxBegin, stat.kind)
+		assert.Equal(statOnTxBegin, stat.kind)
 		defer tx.Close()
 
 		// allocate + write
@@ -240,28 +240,28 @@ func TestObserveStats(t *testing.T) {
 
 func (t *testObserveLast) OnOpen(stats FileStats) {
 	*t = testObserveLast(statEntry{
-		kind: kOnOpen,
+		kind: statOnOpen,
 		file: stats,
 	})
 }
 
 func (t *testObserveLast) OnTxBegin(readonly bool) {
 	*t = testObserveLast(statEntry{
-		kind:     kOnTxBegin,
+		kind:     statOnTxBegin,
 		readonly: readonly,
 	})
 }
 
 func (t *testObserveLast) OnTxClose(file FileStats, tx TxStats) {
 	*t = testObserveLast(statEntry{
-		kind: kOnTxClose,
+		kind: statOnTxClose,
 		file: file,
 		tx:   tx,
 	})
 }
 
 func checkOpenStat(assert *assertions, expected FileStats, actual statEntry, msg ...interface{}) {
-	assert.Equal(kOnOpen, actual.kind, msg...)
+	assert.Equal(statOnOpen, actual.kind, msg...)
 	checkFileStat(assert, expected, actual, msg...)
 }
 
@@ -272,7 +272,7 @@ func checkFileStat(assert *assertions, expected FileStats, actual statEntry, msg
 func checkTxStat(assert *assertions, expected TxStats, actual statEntry, msg ...interface{}) {
 	txActual := actual.tx
 
-	assert.Equal(kOnTxClose, actual.kind, "invalid stat type")
+	assert.Equal(statOnTxClose, actual.kind, "invalid stat type")
 	assert.True(txActual.Duration > 0, "duration should not be 0")
 
 	txActual.Duration = 0

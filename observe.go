@@ -59,7 +59,7 @@ type FileStats struct {
 
 // TxStats contains common statistics collected during the life-cycle of a transaction.
 type TxStats struct {
-	Readonly  bool          // set if transactoin is readonly. In this case only Duration, Total and Accessed will be set.
+	Readonly  bool          // set if transaction is readonly. In this case only Duration, Total and Accessed will be set.
 	Commit    bool          // If set reported stats will be affective in future file operations. Otherwise allocation stats will have no effect.
 	Duration  time.Duration // total duration the transaction was live
 	Total     uint          // total number of pages accessed(written, read, changed) during the transaction

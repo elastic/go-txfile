@@ -45,6 +45,8 @@ type Options struct {
 
 	// Open file in readonly mode.
 	Readonly bool
+
+	Observer Observer
 }
 
 // Flag configures file opening behavior.

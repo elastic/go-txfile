@@ -5,6 +5,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Added `Observer` to txfile for collecting per transaction metrics. PR #23
 
 ### Changed
 

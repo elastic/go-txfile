@@ -66,6 +66,8 @@ type Settings struct {
 	// Optional ACK callback. Will be use to notify number of events being successfully
 	// ACKed and pages being freed.
 	ACKed func(event, pages uint)
+
+	Observer Observer
 }
 
 // MakeRoot prepares the queue header (empty queue).

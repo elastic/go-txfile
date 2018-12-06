@@ -24,7 +24,7 @@ import "time"
 // Each callback reports the header offset for uniquely identifying a queue in
 // case a file holds many queues.
 type Observer interface {
-	OnInit(headerOffset uintptr, version uint32, available uint64)
+	OnQueueInit(headerOffset uintptr, version uint32, available uint)
 
 	OnQueueFlush(headerOffset uintptr, stats FlushStats)
 

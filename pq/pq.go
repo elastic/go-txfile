@@ -31,7 +31,9 @@ import (
 type Queue struct {
 	accessor access
 
-	id queueID
+	id        queueID
+	version   uint32
+	hdrOffset uintptr
 
 	// TODO: add support for multiple named readers with separate ACK handling.
 
@@ -115,7 +117,6 @@ func New(delegate Delegate, settings Settings) (*Queue, error) {
 
 	root := castQueueRootPage(rootBuf[:])
 	if root.version.Get() != queueVersion {
-
 		cause := &Error{
 			kind: InitFailed,
 			msg:  fmt.Sprintf("queue version %v", root.version.Get()),
@@ -125,7 +126,21 @@ func New(delegate Delegate, settings Settings) (*Queue, error) {
 
 	tracef("open queue: %p (pageSize: %v)\n", q, pageSize)
 	traceQueueHeader(root)
+
+	q.version = root.version.Get()
+	q.hdrOffset = q.accessor.RootFileOffset()
+	q.onInit()
 	return q, nil
+}
+
+func (q *Queue) onInit() {
+	o := q.settings.Observer
+	if o == nil {
+		return
+	}
+
+	avail, _ := q.Active()
+	o.OnQueueInit(q.hdrOffset, q.version, avail)
 }
 
 // Close will try to flush the current write buffer,
@@ -229,7 +244,7 @@ func (q *Queue) Active() (uint, error) {
 
 func (q *Queue) getAcker() *acker {
 	if q.acker == nil {
-		q.acker = newAcker(&q.accessor, q.settings.ACKed)
+		q.acker = newAcker(&q.accessor, q.hdrOffset, q.settings.Observer, q.settings.ACKed)
 	}
 	return q.acker
 }

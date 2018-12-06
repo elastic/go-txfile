@@ -18,6 +18,8 @@
 package pq
 
 import (
+	"time"
+
 	"github.com/elastic/go-txfile"
 	"github.com/elastic/go-txfile/internal/invariant"
 )
@@ -26,6 +28,9 @@ import (
 type acker struct {
 	accessor *access
 	active   bool
+
+	hdrOffset uintptr
+	observer  Observer
 
 	totalEventCount uint
 	totalFreedPages uint
@@ -40,8 +45,14 @@ type ackState struct {
 	read position        // New on-disk read pointer, pointing to first not-yet ACKed event.
 }
 
-func newAcker(accessor *access, cb func(uint, uint)) *acker {
-	return &acker{active: true, accessor: accessor, ackCB: cb}
+func newAcker(accessor *access, off uintptr, o Observer, cb func(uint, uint)) *acker {
+	return &acker{
+		hdrOffset: off,
+		observer:  o,
+		active:    true,
+		accessor:  accessor,
+		ackCB:     cb,
+	}
 }
 
 func (a *acker) close() {
@@ -66,16 +77,34 @@ func (a *acker) handle(n uint) error {
 
 	traceln("acker: pq ack events:", n)
 
+	start := time.Now()
+	events, pages, err := a.cleanup(n)
+	if o := a.observer; o != nil {
+		failed := err != nil
+		o.OnQueueACK(a.hdrOffset, ACKStats{
+			Duration: time.Since(start),
+			Failed:   failed,
+			Events:   events,
+			Pages:    pages,
+		})
+	}
+	return err
+}
+
+func (a *acker) cleanup(n uint) (events uint, pages uint, err error) {
+	const op = "pq/ack-cleanup"
+
 	state, err := a.initACK(n)
+	events, pages = n, uint(len(state.free))
 	if err != nil {
-		return a.errWrap(op, err)
+		return events, pages, a.errWrap(op, err)
 	}
 
 	// start write transaction to free pages and update the next read offset in
 	// the queue root
 	tx, txErr := a.accessor.BeginCleanup()
 	if txErr != nil {
-		return a.errWrap(op, txErr).report("failed to init cleanup tx")
+		return events, pages, a.errWrap(op, txErr).report("failed to init cleanup tx")
 	}
 	defer tx.Close()
 
@@ -83,19 +112,19 @@ func (a *acker) handle(n uint) error {
 	for _, id := range state.free {
 		page, err := tx.Page(id)
 		if err != nil {
-			return a.errWrapPage(op, err, id).report("can not access page to be freed")
+			return events, pages, a.errWrapPage(op, err, id).report("can not access page to be freed")
 		}
 
 		traceln("free page", id)
 		if err := page.Free(); err != nil {
-			return a.errWrapPage(op, err, id).report("releasing page failed")
+			return events, pages, a.errWrapPage(op, err, id).report("releasing page failed")
 		}
 	}
 
 	// update queue header
 	hdrPage, hdr, err := a.accessor.LoadRootPage(tx)
 	if err != nil {
-		return err
+		return events, pages, err
 	}
 	a.accessor.WritePosition(&hdr.head, state.head)
 	a.accessor.WritePosition(&hdr.read, state.read)
@@ -105,7 +134,7 @@ func (a *acker) handle(n uint) error {
 	traceQueueHeader(hdr)
 
 	if err := tx.Commit(); err != nil {
-		return a.errWrap(op, err).report("failed to commit changes")
+		return events, pages, a.errWrap(op, err).report("failed to commit changes")
 	}
 
 	a.totalEventCount += n
@@ -116,7 +145,7 @@ func (a *acker) handle(n uint) error {
 		a.ackCB(n, uint(len(state.free)))
 	}
 
-	return nil
+	return events, pages, nil
 }
 
 // initACK uses a read-transaction to collect pages to be removed from list and

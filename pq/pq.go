@@ -211,7 +211,7 @@ func (q *Queue) Writer() (*Writer, error) {
 
 	writeBuffer := q.settings.WriteBuffer
 	flushed := q.settings.Flushed
-	writer, err := newWriter(&q.accessor, q.pagePool, writeBuffer, tail, flushed)
+	writer, err := newWriter(&q.accessor, q.hdrOffset, q.settings.Observer, q.pagePool, writeBuffer, tail, flushed)
 	if err != nil {
 		return nil, q.accessor.errWrap(op, err)
 	}

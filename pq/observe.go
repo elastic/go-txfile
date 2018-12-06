@@ -41,8 +41,9 @@ type FlushStats struct {
 	Failed      bool // set to true if flush operation failed
 	OutOfMemory bool // set to true if flush failed due to the file being full
 
-	Pages  uint // number of pages to be flushed
-	Events uint // number of events to be flushed
+	Pages    uint // number of pages to be flushed
+	Allocate uint // number of pages to allocate during flush operation
+	Events   uint // number of events to be flushed
 
 	BytesTotal uint // total number of bytes written (ignoring headers, just event sizes)
 	BytesMin   uint // size of 'smallest' event in current transaction

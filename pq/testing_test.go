@@ -102,6 +102,10 @@ func (q *testQueue) Close() {
 }
 
 func (q *testQueue) len() int {
+	reader := q.Reader()
+	q.t.FatalOnError(reader.Begin())
+	defer reader.Done()
+
 	i, err := q.Reader().Available()
 	q.t.NoError(err)
 	return int(i)
@@ -126,7 +130,7 @@ func (q *testQueue) read(n int) []string {
 	}
 
 	reader := q.Reader()
-	reader.Begin()
+	q.t.FatalOnError(reader.Begin())
 	defer reader.Done()
 
 	for n < 0 || len(out) < n {

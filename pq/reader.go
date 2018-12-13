@@ -64,15 +64,8 @@ func (r *Reader) Available() (uint, error) {
 		return 0, r.errOf(op, err)
 	}
 
-	var err reason
-	func() {
-		var tx *txfile.Tx
-		tx, err = r.beginTx()
-		if err == nil {
-			defer tx.Close()
-			err = r.updateQueueState(tx)
-		}
-	}()
+	tx := r.tx
+	err := r.updateQueueState(tx)
 	if err != nil {
 		return 0, r.errWrap(op, err)
 	}
@@ -89,12 +82,16 @@ func (r *Reader) Available() (uint, error) {
 func (r *Reader) Begin() error {
 	const op = "pq/reader-begin"
 
-	if r.tx != nil {
-		r.tx.Close()
+	var sig ErrKind = NoError
+	switch {
+	case r.isClosed():
+		sig = ReaderClosed
+	case r.isTxActive():
+		sig = UnexpectedActiveTx
 	}
 
-	if err := r.canRead(); err != NoError {
-		return r.errOf(op, err)
+	if sig != NoError {
+		return r.errOf(op, sig)
 	}
 
 	tx, err := r.beginTx()
@@ -142,16 +139,6 @@ func (r *Reader) Read(b []byte) (int, error) {
 
 func (r *Reader) readInto(to []byte) ([]byte, reason) {
 	tx := r.tx
-	if tx == nil {
-		t, err := r.beginTx()
-		if err != nil {
-			return nil, err
-		}
-
-		tx = t
-		defer tx.Close()
-	}
-
 	n := r.state.eventBytes
 	if L := len(to); L < n {
 		n = L
@@ -198,16 +185,6 @@ func (r *Reader) Next() (int, error) {
 	}
 
 	tx := r.tx
-	if tx == nil {
-		t, err := r.beginTx()
-		if err != nil {
-			return -1, r.errWrap(op, err)
-		}
-
-		tx = t
-		defer tx.Close()
-	}
-
 	cursor := makeTxCursor(tx, r.accessor, &r.state.cursor)
 
 	// in event? Skip contents
@@ -308,10 +285,21 @@ func (r *Reader) beginTx() (*txfile.Tx, reason) {
 }
 
 func (r *Reader) canRead() ErrKind {
-	if !r.active {
+	if r.isClosed() {
 		return ReaderClosed
 	}
+	if !r.isTxActive() {
+		return InactiveTx
+	}
 	return NoError
+}
+
+func (r *Reader) isClosed() bool {
+	return !r.active
+}
+
+func (r *Reader) isTxActive() bool {
+	return r.tx != nil
 }
 
 func (r *Reader) err(op string) *Error {

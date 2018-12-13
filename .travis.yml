@@ -10,6 +10,9 @@ go:
   - '1.11'
   - 'tip'
 
+if:
+  os != 'windows' OR env(TRAVIS_GO_VERSION) != 'tip'
+
 env:
   global:
     - GO_CROSS_VERSION='1.11'

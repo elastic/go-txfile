@@ -23,12 +23,12 @@ before_install:
       exit 1
     fi
   - |
-    if [ "$TRAVIS_OS_NAME" = 'windows' ] && [ "$TRAVIS_GO_VERSION" != "tip ]; then
+    if [ "$TRAVIS_OS_NAME" = 'windows' ] && [ "$TRAVIS_GO_VERSION" != 'tip' ]; then
       choco install golang --version ${TRAVIS_GO_VERSION}
     fi
 
 script: |
-  if [ "$TRAVIS_OS_NAME" != 'windows' ] || [ "$TRAVIS_GO_VERSION" != "tip ]; then
+  if [ "$TRAVIS_OS_NAME" != 'windows' ] || [ "$TRAVIS_GO_VERSION" != 'tip' ]; then
     go test ./...
   fi
 

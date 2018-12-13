@@ -44,7 +44,7 @@ type buffer struct {
 	eventHdrSize   int
 
 	// stats
-	countPages int
+	countPages uint
 }
 
 func newBuffer(pool *pagePool, page *page, pages, pageSize, hdrSz int) *buffer {
@@ -198,7 +198,7 @@ func (b *buffer) CommitEvent(id uint64) {
 
 // Pages returns start and end page to be serialized.
 // The `end` page must not be serialized
-func (b *buffer) Pages() (start, end *page, n int) {
+func (b *buffer) Pages() (start, end *page, n uint) {
 	if b.head == nil || !b.head.Dirty() {
 		return nil, nil, 0
 	}

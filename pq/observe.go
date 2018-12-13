@@ -36,7 +36,7 @@ type Observer interface {
 // FlushStats reports internal stats on the most recent flush operation.
 type FlushStats struct {
 	Duration       time.Duration // duration of flush operation
-	Oldest, Newest time.Duration // age of oldest/newest event in buffer
+	Oldest, Newest time.Time     // timestamp of oldest/newest event in buffer
 
 	Failed      bool // set to true if flush operation failed
 	OutOfMemory bool // set to true if flush failed due to the file being full

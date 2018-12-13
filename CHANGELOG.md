@@ -8,6 +8,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - Added `Observer` to txfile for collecting per transaction metrics. PR #23
 
 ### Changed
+- Queue reader requires explicit transaction start/stop calls. PR #27 
 
 ### Deprecated
 

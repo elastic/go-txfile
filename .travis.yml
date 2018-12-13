@@ -3,15 +3,16 @@ language: go
 os:
   - linux
   - osx
+  - windows
 
 go:
-  - '1.9'
   - '1.10'
+  - '1.11'
   - 'tip'
 
 env:
   global:
-    - GO_CROSS_VERSION='1.10'
+    - GO_CROSS_VERSION='1.11'
     - GO_CHECK_CROSS_SCRIPT='GOOS=$TARGET go build ./...'
 
 # Check we're testing the correct commit (Snippet from: https://github.com/travis-ci/travis-ci/issues/7459#issuecomment-287040521)
@@ -19,7 +20,17 @@ before_install:
   - |
     if [[ "$TRAVIS_COMMIT" != "$(git rev-parse HEAD)" ]]; then
       echo "Commit $(git rev-parse HEAD) doesn't match expected commit $TRAVIS_COMMIT"
+      exit 1
     fi
+  - |
+    if [ "$TRAVIS_OS_NAME" = 'windows' ] && [ "$TRAVIS_GO_VERSION" != "tip ]; then
+      choco install golang --version ${TRAVIS_GO_VERSION}
+    fi
+
+script: |
+  if [ "$TRAVIS_OS_NAME" != 'windows' ] || [ "$TRAVIS_GO_VERSION" != "tip ]; then
+    go test ./...
+  fi
 
 jobs:
   include:

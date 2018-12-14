@@ -54,13 +54,13 @@ type FlushStats struct {
 type ReadStats struct {
 	Duration time.Duration // duration of read transaction
 
-	OneTimeTx bool // false if transaction is used to read multiple events
-	Skipped   uint // number of events skipped (e.g. upon error while reading/parsing)
-	Read      uint // number of events read
+	Skipped uint // number of events skipped (e.g. upon error while reading/parsing)
+	Read    uint // number of events read
 
-	BytesTotal uint // total number of bytes read (ignoring headers)
-	BytesMin   uint // size of 'smallest' event in current transaction
-	BytesMax   uint // size of 'biggest' event in current transaction
+	BytesTotal   uint // total number of bytes read (ignoring headers). Include partially but skipped events
+	BytesSkipped uint // number of event bytes skipped
+	BytesMin     uint // size of 'smallest' event fully read in current transaction
+	BytesMax     uint // size of 'biggest' event fully read in current transaction
 }
 
 // ACKStats reports stats on the most recent ACK transaction.

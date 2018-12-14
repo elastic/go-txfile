@@ -266,18 +266,23 @@ func (w *Writer) doFlush() (pages, allocated uint, err error) {
 	}
 
 	traceln("writer flush", w.state.activeEventCount)
+	tracef("flush page range: start=%p, end=%p, n=%v\n", start, end, pages)
 
 	// unallocated points to first page in list that must be allocated.  All
 	// pages between unallocated and end require a new page to be allocated.
 	var unallocated *page
 	allocated = pages
 	for current := start; current != end; current = current.Next {
+		tracef("check page assigned: %p (%v)\n", current, current.Assigned())
+
 		if !current.Assigned() {
 			unallocated = current
 			break
 		}
 		allocated--
 	}
+
+	tracef("start allocating pages from %p (n=%v)\n", unallocated, allocated)
 
 	tx, txErr := w.accessor.BeginWrite()
 	if txErr != nil {
@@ -297,7 +302,9 @@ func (w *Writer) doFlush() (pages, allocated uint, err error) {
 	if txErr != nil {
 		return pages, allocated, w.errWrap("", txErr)
 	}
-	invariant.Checkf(uint(allocN) == allocated, "allocation counter mismatch (expected=%v, actual=%v)", allocated, allocN)
+
+	traceln("allocated pages:", allocN)
+	invariant.Checkf(allocN == allocated, "allocation counter mismatch (expected=%v, actual=%v)", allocated, allocN)
 
 	linkPages(start, end)
 	defer cleanup.IfNot(&ok, func() { unassignPages(unallocated, end) })
@@ -329,7 +336,7 @@ func (w *Writer) doFlush() (pages, allocated uint, err error) {
 	return pages, allocated, nil
 }
 
-func (w *Writer) updateRootHdr(hdr *queuePage, start, last *page, allocated int) {
+func (w *Writer) updateRootHdr(hdr *queuePage, start, last *page, allocated uint) {
 	if hdr.head.offset.Get() == 0 {
 		w.accessor.WritePosition(&hdr.head, position{
 			page: start.Meta.ID,
@@ -381,19 +388,19 @@ func (w *Writer) errPageCtx(id txfile.PageID) errorCtx {
 	return w.accessor.errPageCtx(id)
 }
 
-func allocatePages(tx *txfile.Tx, start, end *page) (int, error) {
+func allocatePages(tx *txfile.Tx, start, end *page) (uint, error) {
 	if start == nil {
 		return 0, nil
 	}
 
-	allocN := 0
+	var allocN uint
 	for current := start; current != end; current = current.Next {
 		allocN++
 	}
 
 	tracef("allocate %v queue pages\n", allocN)
 
-	txPages, err := tx.AllocN(allocN)
+	txPages, err := tx.AllocN(int(allocN))
 	if err != nil {
 		return 0, err
 	}

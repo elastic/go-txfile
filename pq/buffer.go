@@ -51,6 +51,9 @@ func newBuffer(pool *pagePool, page *page, pages, pageSize, hdrSz int) *buffer {
 	payloadSz := pageSize - hdrSz
 	avail := payloadSz * pages
 
+	tracef("init writer buffer with pages=%v, pageSize=%v, hdrSize=%v, avail=%v\n",
+		pages, pageSize, hdrSz, avail)
+
 	b := &buffer{
 		head:           nil,
 		tail:           nil,
@@ -101,7 +104,7 @@ func (b *buffer) Append(data []byte) {
 		data = data[n:]
 		b.avail -= n
 
-		tracef("writer: append %v bytes to (page: %v, off: %v)\n", n, b.page.Meta.ID, b.page.Meta.EndOff)
+		tracef("writer: append %v bytes to (page: %v, off: %v, avail: %v)\n", n, b.page.Meta.ID, b.page.Meta.EndOff, b.avail)
 
 		b.page.Meta.EndOff += uint32(n)
 	}

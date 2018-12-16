@@ -82,6 +82,9 @@ func newWriter(
 		pages = defaultMinPages
 	}
 
+	tracef("create queue writer with initBufferSize=%v, actualBufferSize=%v, pageSize=%v, pages=%v\n",
+		writeBuffer, pageSize*pages, pageSize, pages)
+
 	var tail *page
 	if end.page != 0 {
 		traceln("writer load endpage: ", end)

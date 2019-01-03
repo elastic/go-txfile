@@ -951,6 +951,10 @@ func setupTestFile(assert *assertions, opts Options) (*testFile, func()) {
 		opts.PageSize = 4096
 	}
 
+	if testing.Short() {
+		opts.Sync = SyncNone
+	}
+
 	ok := false
 	path, teardown := setupPath(assert, "")
 	defer cleanup.IfNot(&ok, teardown)

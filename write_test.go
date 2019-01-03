@@ -140,8 +140,11 @@ func TestFileWriter(t *testing.T) {
 			actual[i] = t
 			offsets[i] = off
 		}
-		assert.Equal(expectedOps, actual)
-		assert.Equal(expectedOffsets, offsets)
+
+		if assert.Equal(len(expectedOps), len(actual)) {
+			assert.Equal(expectedOps, actual)
+			assert.Equal(expectedOffsets, offsets)
+		}
 	})
 
 	assert.Run("ordered writes", func(assert *assertions) {
@@ -250,7 +253,7 @@ func TestFileWriter(t *testing.T) {
 
 func newTestWriter(to writable, pagesize uint) (*writer, func() error) {
 	w := &writer{}
-	w.Init(to, pagesize)
+	w.Init(to, pagesize, SyncDefault)
 
 	cw := makeCloseWait(1 * time.Second)
 	cw.Add(1)

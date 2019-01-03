@@ -206,7 +206,7 @@ func newFile(
 		"page limit not configured on allocator")
 
 	// create asynchronous writer
-	f.writer.Init(file, f.allocator.pageSize)
+	f.writer.Init(file, f.allocator.pageSize, opts.Sync)
 	f.wg.Add(1)
 	go func() {
 		defer f.wg.Done()

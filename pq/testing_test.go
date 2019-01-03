@@ -19,6 +19,7 @@ package pq
 
 import (
 	"math/rand"
+	"testing"
 
 	"github.com/elastic/go-txfile"
 	"github.com/elastic/go-txfile/internal/cleanup"
@@ -46,6 +47,10 @@ func exactly(n int) testRange        { return testRange{n, n} }
 func between(min, max int) testRange { return testRange{min, max} }
 
 func setupQueue(t *mint.T, cfg config) (*testQueue, func()) {
+	if testing.Short() {
+		cfg.File.Sync = txfile.SyncNone
+	}
+
 	tf, teardown := txfiletest.SetupTestFile(t.T, cfg.File)
 
 	ok := false

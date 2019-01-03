@@ -83,219 +83,228 @@ func TestObserveStats(testing *testing.T) {
 		}
 	}
 
-	t.Run("open empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		qu.Reopen()
-		t.Equal(stat.kind, statOnOpen)
-		t.Equal(int(stat.version), queueVersion) // current version
-		t.Equal(int(stat.available), 0)
-	}))
+	t.Run("open", func(t *mint.T) {
+		t.Run("empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.Reopen()
+			t.Equal(stat.kind, statOnOpen)
+			t.Equal(int(stat.version), queueVersion) // current version
+			t.Equal(int(stat.available), 0)
+		}))
 
-	t.Run("open non-empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		// write 3 events
-		qu.append("a", "b", "c")
-		qu.flush()
+		t.Run("non-empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			// write 3 events
+			qu.append("a", "b", "c")
+			qu.flush()
 
-		// validate
-		qu.Reopen()
-		t.Equal(stat.kind, statOnOpen)
-		t.Equal(int(stat.version), queueVersion) // current version
-		t.Equal(int(stat.available), 3)
-	}))
+			// validate
+			qu.Reopen()
+			t.Equal(stat.kind, statOnOpen)
+			t.Equal(int(stat.version), queueVersion) // current version
+			t.Equal(int(stat.available), 3)
+		}))
+	})
 
-	t.Run("small write with explicit flush", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		qu.append("a", "bc", "def")
-		t.Equal(statNone, stat.kind, "unexpected stats update")
+	t.Run("write", func(t *mint.T) {
+		t.Run("explicit flush", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.append("a", "bc", "def")
+			t.Equal(statNone, stat.kind, "unexpected stats update")
 
-		qu.flush()
-		t.Equal(statOnFlush, stat.kind)
-		t.Equal(FlushStats{
-			// do not compare duration and timestamps ;)
-			Duration: stat.flush.Duration,
-			Oldest:   stat.flush.Oldest,
-			Newest:   stat.flush.Newest,
+			qu.flush()
+			t.Equal(statOnFlush, stat.kind)
+			t.Equal(FlushStats{
+				// do not compare duration and timestamps ;)
+				Duration: stat.flush.Duration,
+				Oldest:   stat.flush.Oldest,
+				Newest:   stat.flush.Newest,
 
-			// validated fields
-			Failed:      false,
-			OutOfMemory: false,
-			Pages:       1,
-			Allocate:    1,
-			Events:      3,
-			BytesTotal:  6,
-			BytesMin:    1,
-			BytesMax:    3,
-		}, stat.flush)
-		t.True(stat.flush.Duration > 0, "flush duration should be > 0")
-		t.False(stat.flush.Oldest.IsZero(), "oldest timestamp must not be 0")
-		t.False(stat.flush.Newest.IsZero(), "newest timestamp must not be 0")
+				// validated fields
+				Failed:      false,
+				OutOfMemory: false,
+				Pages:       1,
+				Allocate:    1,
+				Events:      3,
+				BytesTotal:  6,
+				BytesMin:    1,
+				BytesMax:    3,
+			}, stat.flush)
+			t.True(stat.flush.Duration > 0, "flush duration should be > 0")
+			t.False(stat.flush.Oldest.IsZero(), "oldest timestamp must not be 0")
+			t.False(stat.flush.Newest.IsZero(), "newest timestamp must not be 0")
 
-		if isWindows {
-			t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do match")
-		}
-	}))
+			if isWindows {
+				t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do match")
+			}
+		}))
 
-	t.Run("big write with implcicit flush", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		var msg [5000]byte
-		qu.append(string(msg[:]))
+		t.Run("implcicit flush", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			var msg [5000]byte
+			qu.append(string(msg[:]))
 
-		t.Equal(statOnFlush, stat.kind)
-		t.Equal(FlushStats{
-			// do not compare duration and timestamps ;)
-			Duration: stat.flush.Duration,
-			Oldest:   stat.flush.Oldest,
-			Newest:   stat.flush.Newest,
+			t.Equal(statOnFlush, stat.kind)
+			t.Equal(FlushStats{
+				// do not compare duration and timestamps ;)
+				Duration: stat.flush.Duration,
+				Oldest:   stat.flush.Oldest,
+				Newest:   stat.flush.Newest,
 
-			// validated fields
-			Failed:      false,
-			OutOfMemory: false,
-			Pages:       6,
-			Allocate:    6,
-			Events:      1,
-			BytesTotal:  5000,
-			BytesMin:    5000,
-			BytesMax:    5000,
-		}, stat.flush)
-		t.True(stat.flush.Duration > 0, "flush duration should be > 0")
-		t.False(stat.flush.Oldest.IsZero(), "oldest timestamp must not be 0")
-		t.False(stat.flush.Newest.IsZero(), "newest timestamp must not be 0")
-		t.True(stat.flush.Oldest == stat.flush.Newest, "timestamps do not match")
-	}))
+				// validated fields
+				Failed:      false,
+				OutOfMemory: false,
+				Pages:       6,
+				Allocate:    6,
+				Events:      1,
+				BytesTotal:  5000,
+				BytesMin:    5000,
+				BytesMax:    5000,
+			}, stat.flush)
+			t.True(stat.flush.Duration > 0, "flush duration should be > 0")
+			t.False(stat.flush.Oldest.IsZero(), "oldest timestamp must not be 0")
+			t.False(stat.flush.Newest.IsZero(), "newest timestamp must not be 0")
+			t.True(stat.flush.Oldest == stat.flush.Newest, "timestamps do not match")
+		}))
 
-	t.Run("flush on close", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		qu.append("a", "bc", "def")
-		qu.Close()
+		t.Run("flush on close", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.append("a", "bc", "def")
+			qu.Close()
 
-		t.Equal(statOnFlush, stat.kind)
-		t.Equal(FlushStats{
-			// do not compare duration and timestamps ;)
-			Duration: stat.flush.Duration,
-			Oldest:   stat.flush.Oldest,
-			Newest:   stat.flush.Newest,
+			t.Equal(statOnFlush, stat.kind)
+			t.Equal(FlushStats{
+				// do not compare duration and timestamps ;)
+				Duration: stat.flush.Duration,
+				Oldest:   stat.flush.Oldest,
+				Newest:   stat.flush.Newest,
 
-			// validated fields
-			Failed:      false,
-			OutOfMemory: false,
-			Pages:       1,
-			Allocate:    1,
-			Events:      3,
-			BytesTotal:  6,
-			BytesMin:    1,
-			BytesMax:    3,
-		}, stat.flush)
-		t.True(stat.flush.Duration > 0, "flush duration should be > 0")
-		t.False(stat.flush.Oldest.IsZero(), "oldest timestamp must not be 0")
-		t.False(stat.flush.Newest.IsZero(), "newest timestamp must not be 0")
+				// validated fields
+				Failed:      false,
+				OutOfMemory: false,
+				Pages:       1,
+				Allocate:    1,
+				Events:      3,
+				BytesTotal:  6,
+				BytesMin:    1,
+				BytesMax:    3,
+			}, stat.flush)
+			t.True(stat.flush.Duration > 0, "flush duration should be > 0")
+			t.False(stat.flush.Oldest.IsZero(), "oldest timestamp must not be 0")
+			t.False(stat.flush.Newest.IsZero(), "newest timestamp must not be 0")
 
-		if !isWindows {
-			t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do match")
-		}
-	}))
+			if !isWindows {
+				t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do match")
+			}
+		}))
+	})
 
-	t.Run("read from empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		data := qu.read(10)
-		t.Equal(0, len(data), "did read data")
+	t.Run("read", func(t *mint.T) {
+		t.Run("empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			data := qu.read(10)
+			t.Equal(0, len(data), "did read data")
 
-		if t.Equal(statOnRead, stat.kind, "no read stat upon empty read") {
-			t.Equal(ReadStats{
-				Duration: stat.read.Duration,
-			}, stat.read)
-		}
-	}))
+			if t.Equal(statOnRead, stat.kind, "no read stat upon empty read") {
+				t.Equal(ReadStats{
+					Duration: stat.read.Duration,
+				}, stat.read)
+			}
+		}))
 
-	t.Run("read one entry from non-empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		qu.append("entry one", "entry two", "entry three")
-		qu.flush()
+		t.Run("one entry", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.append("entry one", "entry two", "entry three")
+			qu.flush()
 
-		data := qu.read(1)
-		t.Equal(1, len(data), "failed to 1 entry")
+			data := qu.read(1)
+			t.Equal(1, len(data), "failed to 1 entry")
 
-		if t.Equal(statOnRead, stat.kind, "no read state") {
-			t.Equal(ReadStats{
-				Duration:   stat.read.Duration,
-				Read:       1,
-				BytesTotal: 9,
-				BytesMin:   9,
-				BytesMax:   9,
-			}, stat.read)
-		}
-	}))
+			if t.Equal(statOnRead, stat.kind, "no read state") {
+				t.Equal(ReadStats{
+					Duration:   stat.read.Duration,
+					Read:       1,
+					BytesTotal: 9,
+					BytesMin:   9,
+					BytesMax:   9,
+				}, stat.read)
+			}
+		}))
 
-	t.Run("read multiple entries from queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		qu.append("entry one", "entry two", "entry three", "entry four")
-		qu.flush()
+		t.Run("multiple entries", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.append("entry one", "entry two", "entry three", "entry four")
+			qu.flush()
 
-		data := qu.read(3)
-		t.Equal(3, len(data), "failed to 3 entries")
+			data := qu.read(3)
+			t.Equal(3, len(data), "failed to 3 entries")
 
-		if t.Equal(statOnRead, stat.kind, "no read state") {
-			t.Equal(ReadStats{
-				Duration:   stat.read.Duration,
-				Read:       3,
-				BytesTotal: 9 + 9 + 11,
-				BytesMin:   9,
-				BytesMax:   11,
-			}, stat.read)
-		}
-	}))
+			if t.Equal(statOnRead, stat.kind, "no read state") {
+				t.Equal(ReadStats{
+					Duration:   stat.read.Duration,
+					Read:       3,
+					BytesTotal: 9 + 9 + 11,
+					BytesMin:   9,
+					BytesMax:   11,
+				}, stat.read)
+			}
+		}))
 
-	t.Run("read with skip", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		qu.append("entry one", "entry two", "entry three", "entry four")
-		qu.flush()
+		t.Run("skip", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.append("entry one", "entry two", "entry three", "entry four")
+			qu.flush()
 
-		qu.readWith(func(r *Reader) {
-			var tmp [2]byte
-			_, err := r.Next()
-			t.FatalOnError(err)
+			qu.readWith(func(r *Reader) {
+				var tmp [2]byte
+				_, err := r.Next()
+				t.FatalOnError(err)
 
-			_, err = r.Read(tmp[:])
-			t.FatalOnError(err)
+				_, err = r.Read(tmp[:])
+				t.FatalOnError(err)
 
-			_, err = r.Next()
-			t.FatalOnError(err)
-		})
+				_, err = r.Next()
+				t.FatalOnError(err)
+			})
 
-		if t.Equal(statOnRead, stat.kind, "no read state") {
-			t.Equal(ReadStats{
-				Duration:     stat.read.Duration,
-				Skipped:      1,
-				BytesTotal:   2,
-				BytesSkipped: 7,
-			}, stat.read)
-		}
-	}))
+			if t.Equal(statOnRead, stat.kind, "no read state") {
+				t.Equal(ReadStats{
+					Duration:     stat.read.Duration,
+					Skipped:      1,
+					BytesTotal:   2,
+					BytesSkipped: 7,
+				}, stat.read)
+			}
+		}))
 
-	t.Run("read event in 2 transactions", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
-		qu.append("entry one", "entry two", "entry three", "entry four")
-		qu.flush()
+		t.Run("1 event in 2 transactions", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.append("entry one", "entry two", "entry three", "entry four")
+			qu.flush()
 
-		qu.readWith(func(r *Reader) {
-			var tmp [2]byte
-			_, err := r.Next()
-			t.FatalOnError(err)
+			qu.readWith(func(r *Reader) {
+				var tmp [2]byte
+				_, err := r.Next()
+				t.FatalOnError(err)
 
-			_, err = r.Read(tmp[:])
-			t.FatalOnError(err)
-		})
-		if t.Equal(statOnRead, stat.kind, "no read stat upon empty read") {
-			t.Equal(ReadStats{
-				Duration: stat.read.Duration,
-			}, stat.read)
-		}
+				_, err = r.Read(tmp[:])
+				t.FatalOnError(err)
+			})
+			if t.Equal(statOnRead, stat.kind, "no read stat upon empty read") {
+				t.Equal(ReadStats{
+					Duration: stat.read.Duration,
+				}, stat.read)
+			}
 
-		qu.readWith(func(r *Reader) {
-			var tmp [7]byte
-			_, err := r.Read(tmp[:])
-			t.FatalOnError(err)
-		})
-		if t.Equal(statOnRead, stat.kind, "no read stat upon empty read") {
-			t.Equal(ReadStats{
-				Duration:   stat.read.Duration,
-				Read:       1,
-				BytesTotal: 9,
-				BytesMin:   9,
-				BytesMax:   9,
-			}, stat.read)
-		}
-	}))
+			qu.readWith(func(r *Reader) {
+				var tmp [7]byte
+				_, err := r.Read(tmp[:])
+				t.FatalOnError(err)
+			})
+			if t.Equal(statOnRead, stat.kind, "no read stat upon empty read") {
+				t.Equal(ReadStats{
+					Duration:   stat.read.Duration,
+					Read:       1,
+					BytesTotal: 9,
+					BytesMin:   9,
+					BytesMax:   9,
+				}, stat.read)
+			}
+		}))
+	})
+
+	t.Run("ack", func(t *mint.T) {
+	})
 }
 
 func newTestObserver(stat *statEntry) *testObserveLast {

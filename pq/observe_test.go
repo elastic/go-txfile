@@ -18,6 +18,7 @@
 package pq
 
 import (
+	"runtime"
 	"testing"
 
 	txfile "github.com/elastic/go-txfile"
@@ -53,7 +54,7 @@ const (
 var isWindows bool
 
 func init() {
-	isWindows = runtime.OS == "windows"
+	isWindows = runtime.GOOS == "windows"
 }
 
 func TestObserveStats(testing *testing.T) {
@@ -186,6 +187,113 @@ func TestObserveStats(testing *testing.T) {
 
 		if !isWindows {
 			t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do match")
+		}
+	}))
+
+	t.Run("read from empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+		data := qu.read(10)
+		t.Equal(0, len(data), "did read data")
+
+		if t.Equal(statOnRead, stat.kind, "no read stat upon empty read") {
+			t.Equal(ReadStats{
+				Duration: stat.read.Duration,
+			}, stat.read)
+		}
+	}))
+
+	t.Run("read one entry from non-empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+		qu.append("entry one", "entry two", "entry three")
+		qu.flush()
+
+		data := qu.read(1)
+		t.Equal(1, len(data), "failed to 1 entry")
+
+		if t.Equal(statOnRead, stat.kind, "no read state") {
+			t.Equal(ReadStats{
+				Duration:   stat.read.Duration,
+				Read:       1,
+				BytesTotal: 9,
+				BytesMin:   9,
+				BytesMax:   9,
+			}, stat.read)
+		}
+	}))
+
+	t.Run("read multiple entries from queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+		qu.append("entry one", "entry two", "entry three", "entry four")
+		qu.flush()
+
+		data := qu.read(3)
+		t.Equal(3, len(data), "failed to 3 entries")
+
+		if t.Equal(statOnRead, stat.kind, "no read state") {
+			t.Equal(ReadStats{
+				Duration:   stat.read.Duration,
+				Read:       3,
+				BytesTotal: 9 + 9 + 11,
+				BytesMin:   9,
+				BytesMax:   11,
+			}, stat.read)
+		}
+	}))
+
+	t.Run("read with skip", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+		qu.append("entry one", "entry two", "entry three", "entry four")
+		qu.flush()
+
+		qu.readWith(func(r *Reader) {
+			var tmp [2]byte
+			_, err := r.Next()
+			t.FatalOnError(err)
+
+			_, err = r.Read(tmp[:])
+			t.FatalOnError(err)
+
+			_, err = r.Next()
+			t.FatalOnError(err)
+		})
+
+		if t.Equal(statOnRead, stat.kind, "no read state") {
+			t.Equal(ReadStats{
+				Duration:     stat.read.Duration,
+				Skipped:      1,
+				BytesTotal:   2,
+				BytesSkipped: 7,
+			}, stat.read)
+		}
+	}))
+
+	t.Run("read event in 2 transactions", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+		qu.append("entry one", "entry two", "entry three", "entry four")
+		qu.flush()
+
+		qu.readWith(func(r *Reader) {
+			var tmp [2]byte
+			_, err := r.Next()
+			t.FatalOnError(err)
+
+			_, err = r.Read(tmp[:])
+			t.FatalOnError(err)
+		})
+		if t.Equal(statOnRead, stat.kind, "no read stat upon empty read") {
+			t.Equal(ReadStats{
+				Duration: stat.read.Duration,
+			}, stat.read)
+		}
+
+		qu.readWith(func(r *Reader) {
+			var tmp [7]byte
+			_, err := r.Read(tmp[:])
+			t.FatalOnError(err)
+		})
+		if t.Equal(statOnRead, stat.kind, "no read stat upon empty read") {
+			t.Equal(ReadStats{
+				Duration:   stat.read.Duration,
+				Read:       1,
+				BytesTotal: 9,
+				BytesMin:   9,
+				BytesMax:   9,
+			}, stat.read)
 		}
 	}))
 }

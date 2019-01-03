@@ -225,7 +225,7 @@ func (q *Queue) Writer() (*Writer, error) {
 // The reader is not thread safe.
 func (q *Queue) Reader() *Reader {
 	if q.reader == nil {
-		q.reader = newReader(&q.accessor)
+		q.reader = newReader(q.settings.Observer, &q.accessor)
 	}
 	return q.reader
 }

@@ -127,6 +127,14 @@ func (q *testQueue) append(events ...string) {
 	}
 }
 
+func (q *testQueue) readWith(fn func(*Reader)) {
+	r := q.Reader()
+	q.t.FatalOnError(r.Begin())
+	defer r.Done()
+
+	fn(r)
+}
+
 // read reads up to n events from the queue.
 func (q *testQueue) read(n int) []string {
 	var out []string

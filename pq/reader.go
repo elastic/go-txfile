@@ -47,10 +47,11 @@ type readState struct {
 	cursor cursor
 }
 
-func newReader(accessor *access) *Reader {
+func newReader(observer Observer, accessor *access) *Reader {
 	return &Reader{
 		active:   true,
 		accessor: accessor,
+		observer: observer,
 		state: readState{
 			eventBytes:    -1,
 			totEventBytes: -1,
@@ -121,6 +122,11 @@ func (r *Reader) Done() {
 	}
 
 	r.tx.Close()
+
+	if r.state.eventBytes < 0 && r.state.totEventBytes > 0 {
+		// did read complete event -> adapt stats
+		r.adoptEventStats()
+	}
 
 	r.stats.Duration = time.Since(r.txStart)
 	if o := r.observer; o != nil {
@@ -266,6 +272,11 @@ func (r *Reader) Next() (int, error) {
 }
 
 func (r *Reader) adoptEventStats() {
+	if r.state.totEventBytes < 0 {
+		// no active event
+		return
+	}
+
 	// update stats:
 	skipping := r.state.eventBytes > 0
 
@@ -287,6 +298,7 @@ func (r *Reader) adoptEventStats() {
 				r.stats.BytesMax = bytes
 			}
 		}
+
 		r.stats.Read++
 	}
 }

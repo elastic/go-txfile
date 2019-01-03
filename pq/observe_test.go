@@ -50,6 +50,12 @@ const (
 	statOnACK
 )
 
+var isWindows bool
+
+func init() {
+	isWindows = runtime.OS == "windows"
+}
+
 func TestObserveStats(testing *testing.T) {
 	t := mint.NewWith(testing, func(sub *mint.T) func() {
 		pushTracer(mint.NewTestLogTracer(sub, logTracer))
@@ -120,7 +126,10 @@ func TestObserveStats(testing *testing.T) {
 		t.True(stat.flush.Duration > 0, "flush duration should be > 0")
 		t.False(stat.flush.Oldest.IsZero(), "oldest timestamp must not be 0")
 		t.False(stat.flush.Newest.IsZero(), "newest timestamp must not be 0")
-		t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do not match")
+
+		if isWindows {
+			t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do match")
+		}
 	}))
 
 	t.Run("big write with implcicit flush", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
@@ -174,7 +183,10 @@ func TestObserveStats(testing *testing.T) {
 		t.True(stat.flush.Duration > 0, "flush duration should be > 0")
 		t.False(stat.flush.Oldest.IsZero(), "oldest timestamp must not be 0")
 		t.False(stat.flush.Newest.IsZero(), "newest timestamp must not be 0")
-		t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do not match")
+
+		if !isWindows {
+			t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do match")
+		}
 	}))
 }
 

@@ -58,6 +58,10 @@ func init() {
 }
 
 func TestObserveStats(testing *testing.T) {
+	const testPageSize = 1024
+	const testMaxPages = 128
+	const testMaxSize = testMaxPages * testPageSize
+
 	t := mint.NewWith(testing, func(sub *mint.T) func() {
 		pushTracer(mint.NewTestLogTracer(sub, logTracer))
 		return popTracer
@@ -68,8 +72,8 @@ func TestObserveStats(testing *testing.T) {
 			stat := &statEntry{}
 			qu, teardown := setupQueue(t, config{
 				File: txfile.Options{
-					MaxSize:  128 * 1024, // default file size of 128 pages
-					PageSize: 1024,
+					MaxSize:  testMaxSize, // default file size of 128 pages
+					PageSize: testPageSize,
 				},
 				Queue: Settings{
 					WriteBuffer: defaultMinPages, // buffer up to 5 pages
@@ -131,7 +135,7 @@ func TestObserveStats(testing *testing.T) {
 			t.False(stat.flush.Oldest.IsZero(), "oldest timestamp must not be 0")
 			t.False(stat.flush.Newest.IsZero(), "newest timestamp must not be 0")
 
-			if isWindows {
+			if !isWindows {
 				t.True(stat.flush.Oldest != stat.flush.Newest, "timestamps do match")
 			}
 		}))
@@ -304,6 +308,43 @@ func TestObserveStats(testing *testing.T) {
 	})
 
 	t.Run("ack", func(t *mint.T) {
+		t.Run("fail on empty queue", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			err := qu.ACK(2)
+			t.Error(err)
+
+			t.Equal(statOnACK, stat.kind)
+			t.Equal(ACKStats{
+				Duration: stat.ack.Duration,
+				Failed:   true,
+				Events:   2,
+			}, stat.ack)
+		}))
+
+		t.Run("event in active page", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.append("entry one", "entry two", "entry three", "entry four")
+			qu.flush()
+
+			t.FatalOnError(qu.ACK(1))
+			t.Equal(ACKStats{
+				Duration: stat.ack.Duration,
+				Failed:   false,
+				Events:   1,
+			}, stat.ack)
+		}))
+
+		t.Run("all events - single page", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.append("entry one", "entry two", "entry three", "entry four")
+			qu.flush()
+
+			t.FatalOnError(qu.ACK(4))
+			t.Equal(ACKStats{
+				Duration: stat.ack.Duration,
+				Failed:   false,
+				Events:   4,
+				Pages:    0, // we don't free last page so to not interfere with concurrent write
+			}, stat.ack)
+		}))
+
 	})
 }
 

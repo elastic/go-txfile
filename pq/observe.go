@@ -69,5 +69,5 @@ type ACKStats struct {
 	Failed   bool
 
 	Events uint // number of released events
-	Pages  uint // number of release pages
+	Pages  uint // number of released pages
 }

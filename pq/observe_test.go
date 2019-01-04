@@ -345,6 +345,18 @@ func TestObserveStats(testing *testing.T) {
 			}, stat.ack)
 		}))
 
+		t.Run("large events", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+			qu.append(genEventLen(testPageSize*2.5), genEventLen(testPageSize*1.5))
+			qu.flush()
+
+			t.FatalOnError(qu.ACK(2))
+			t.Equal(ACKStats{
+				Duration: stat.ack.Duration,
+				Failed:   false,
+				Events:   2,
+				Pages:    2, // we only free pages for the first event, so to not mess with the readers local state
+			}, stat.ack)
+		}))
 	})
 }
 
@@ -374,3 +386,7 @@ func (t *testObserveLast) set(off uintptr, kind statKind, e statEntry) {
 }
 
 func (s *statEntry) reset() { *s = statEntry{} }
+
+func genEventLen(n int) string {
+	return string(make([]byte, n))
+}

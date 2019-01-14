@@ -7,6 +7,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 - Added `Observer` to txfile for collecting per transaction metrics. PR #23
 - Make file syncing configurable. PR #29
+- Added `Observer` to pq package for collecting operational metrics. PR #26
 
 ### Changed
 - Queue reader requires explicit transaction start/stop calls. PR #27 

@@ -140,7 +140,7 @@ func TestObserveStats(testing *testing.T) {
 			}
 		}))
 
-		t.Run("implcicit flush", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
+		t.Run("implicit flush", withQueue(func(t *mint.T, qu *testQueue, stat *statEntry) {
 			var msg [5000]byte
 			qu.append(string(msg[:]))
 

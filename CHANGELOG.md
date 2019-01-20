@@ -13,6 +13,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Removed
 
 ### Fixed
+- Panic on atomic operation (arm, x86-32) and File lock not released when panic occurs. PR #31
 
 ## [0.0.4]
 

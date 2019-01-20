@@ -22,8 +22,6 @@ import (
 	"time"
 )
 
-type recording []statEntry
-
 type statEntry struct {
 	kind     statKind
 	readonly bool
@@ -46,7 +44,7 @@ func TestObserveStats(t *testing.T) {
 
 	setupFileWith := func(assert *assertions, stat *statEntry) (*testFile, func()) {
 		return setupTestFile(assert, Options{
-			Observer: (*testObserveLast)(stat),
+			Observer: newTestObserver(stat),
 			MaxSize:  10 * 1 << 20, // 10 MB
 		})
 	}
@@ -244,6 +242,10 @@ func TestObserveStats(t *testing.T) {
 			Written:   4,
 		}, stat, "invalid tx stats after rollback with writes")
 	})
+}
+
+func newTestObserver(stat *statEntry) *testObserveLast {
+	return (*testObserveLast)(stat)
 }
 
 func (t *testObserveLast) OnOpen(stats FileStats) {

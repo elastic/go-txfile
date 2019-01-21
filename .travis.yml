@@ -42,6 +42,7 @@ jobs:
         - docker
       before_install:
         - docker pull $DOCKER_IMAGE
+        - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - |
           go get -u -d github.com/magefile/mage
           (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)

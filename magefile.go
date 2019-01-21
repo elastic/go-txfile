@@ -26,14 +26,13 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
-	"sort"
-	"strconv"
+	"strings"
 
-	"github.com/joeshaw/multierror"
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
 
 	"github.com/elastic/go-txfile/dev-tools/lib/mage/gotool"
+	"github.com/elastic/go-txfile/dev-tools/lib/mage/mgenv"
 )
 
 type Check mg.Namespace
@@ -43,46 +42,21 @@ type Info mg.Namespace
 
 const buildHome = "build"
 
-type envVar struct{ name, other, doc string }
-
 // environment variables
 var (
-	envBuildOS    = defEnv("BUILD_OS", "", "(string) set compiler target GOOS")
-	envBuildArch  = defEnv("BUILD_ARCH", "", "(string) set compiler target GOARCH")
-	envTestUseBin = defEnv("TEST_USE_BIN", "", "(bool) reuse prebuild test binary when running tests")
+	envBuildOS    = mgenv.String("BUILD_OS", runtime.GOOS, "(string) set compiler target GOOS")
+	envBuildArch  = mgenv.String("BUILD_ARCH", runtime.GOARCH, "(string) set compiler target GOARCH")
+	envTestUseBin = mgenv.Bool("TEST_USE_BIN", false, "(bool) reuse prebuild test binary when running tests")
+	envTestShort  = mgenv.Bool("TEST_SHORT", false, "(bool) run tests with -short flag")
+	envFailFast   = mgenv.Bool("FAIL_FAST", false, "(bool) do not run other tasks on failure")
 )
-
-var envVars = map[string]*envVar{}
-
-func defEnv(name, value, doc string) *envVar {
-	e := &envVar{name: name, other: value, doc: doc}
-	if _, exists := envVars[name]; exists {
-		panic(fmt.Errorf("env variable '%v' already registered", name))
-	}
-	envVars[name] = e
-	return e
-}
-
-func (e *envVar) get() string {
-	v := os.Getenv(e.name)
-	if v == "" {
-		return e.other
-	}
-	return v
-}
 
 // targets
 
 func (Info) Env() {
-	keys := make([]string, 0, len(envVars))
-	for k := range envVars {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		v := envVars[k]
-		fmt.Printf("%v: %v\n", k, v.doc)
+	for _, k := range mgenv.Keys() {
+		v, _ := mgenv.Find(k)
+		fmt.Printf("%v=%v  : %v\n", k, v.Default(), v.Doc())
 	}
 }
 
@@ -97,8 +71,8 @@ func (Prepare) Dirs() error {
 func (Build) Mage() error {
 	mg.Deps(Prepare.Dirs)
 
-	goos := envDefault(envBuildOS, runtime.GOOS)
-	goarch := envDefault(envBuildArch, runtime.GOARCH)
+	goos := envBuildOS
+	goarch := envBuildArch
 	out := filepath.Join(buildHome, fmt.Sprintf("mage-%v-%v", goos, goarch))
 	return sh.Run("mage", "-f", "-goos="+goos, "-goarch="+goarch, "-compile", out)
 }
@@ -106,11 +80,11 @@ func (Build) Mage() error {
 func (Build) Test() error {
 	mg.Deps(Prepare.Dirs)
 
-	return withList(gotool.ListProjectPackages, each, func(pkg string) error {
+	return withList(gotool.ListProjectPackages, failFastEach, func(pkg string) error {
 		tst := gotool.Test
 		return tst(
-			tst.OS(env(envBuildOS)),
-			tst.ARCH(env(envBuildArch)),
+			tst.OS(envBuildOS),
+			tst.ARCH(envBuildArch),
 			tst.Create(),
 			tst.WithCoverage(""),
 			tst.Out(path.Join(buildHome, pkg, path.Base(pkg))),
@@ -122,13 +96,19 @@ func (Build) Test() error {
 func Test() error {
 	mg.Deps(Prepare.Dirs)
 
-	return withList(gotool.ListProjectPackages, each, func(pkg string) error {
+	return withList(gotool.ListProjectPackages, failFastEach, func(pkg string) error {
+		if b, err := gotool.HasTests(pkg); !b {
+			fmt.Printf("Skipping %v: No tests found\n", pkg)
+			return err
+		}
+
 		tst := gotool.Test
 		fmt.Println("Test:", pkg)
 		bin := path.Join(buildHome, pkg, path.Base(pkg))
 		return tst(
-			tst.Use(useIf(bin, existsFile(bin) && envBool(envTestUseBin))),
+			tst.Use(useIf(bin, existsFile(bin) && envTestUseBin)),
 			tst.WithCoverage(path.Join(buildHome, pkg, "cover.out")),
+			tst.Short(envTestShort),
 			tst.Out(bin),
 			tst.Package(pkg),
 			tst.Verbose(),
@@ -173,21 +153,6 @@ func existsFile(path string) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
-func env(ev *envVar) string { return ev.get() }
-
-func envDefault(ev *envVar, other string) string {
-	v := env(ev)
-	if v == "" {
-		return other
-	}
-	return v
-}
-
-func envBool(ev *envVar) bool {
-	b, err := strconv.ParseBool(env(ev))
-	return err == nil && b
-}
-
 func mkdirs(paths ...string) error {
 	for _, p := range paths {
 		if err := mkdir(p); err != nil {
@@ -201,14 +166,22 @@ func mkdir(path string) error {
 	return os.MkdirAll(path, os.ModeDir|0700)
 }
 
+func failFastEach(ops ...func() error) error {
+	mode := each
+	if envFailFast {
+		mode = and
+	}
+	return mode(ops...)
+}
+
 func each(ops ...func() error) error {
-	var errs multierror.Errors
+	var errs []error
 	for _, op := range ops {
 		if err := op(); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	return errs.Err()
+	return makeErrs(errs)
 }
 
 func and(ops ...func() error) error {
@@ -218,4 +191,24 @@ func and(ops ...func() error) error {
 		}
 	}
 	return nil
+}
+
+type multiErr []error
+
+func makeErrs(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	return multiErr(errs)
+}
+
+func (m multiErr) Error() string {
+	var bld strings.Builder
+	for _, err := range m {
+		if bld.Len() > 0 {
+			bld.WriteByte('\n')
+			bld.WriteString(err.Error())
+		}
+	}
+	return bld.String()
 }

@@ -49,7 +49,7 @@ jobs:
         - mage -v build:mage # cross compile mage target
         - mage -v build:test # cross compile tests
         - file build/github.com/elastic/go-txfile/go-txfile
-        - docker run --rm -i -t $DOCKER_IMAGE go env
+        - docker run --rm -i -t balenalib/revpi-core-3-alpine-golang:latest-edge-build go env
         - docker run -v $GOPATH/src:/go/src -w /go/src/github.com/elastic/go-txfile -e TEST_USE_BIN=1 --rm -i -t $DOCKER_IMAGE ./build/mage-linux-arm -v test
 
 

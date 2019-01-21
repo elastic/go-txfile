@@ -18,6 +18,7 @@
 package gotool
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -43,21 +44,30 @@ func ListProjectPackages() ([]string, error) {
 }
 
 func ListPackages(pkgs ...string) ([]string, error) {
-	out, err := callGo(nil, "list", pkgs)
+	return getLines(callGo(nil, "list", pkgs...))
+}
+
+func ListTestFiles(pkg string) ([]string, error) {
+	const tmpl = `{{ range .TestGoFiles }}{{ printf "%s\n" . }}{{ end }}` +
+		`{{ range .XTestGoFiles }}{{ printf "%s\n" . }}{{ end }}`
+
+	return getLines(callGo(nil, "list", "-f", tmpl, pkg))
+}
+
+func HasTests(pkg string) (bool, error) {
+	files, err := ListTestFiles(pkg)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
-	lines := strings.Split(out, "\n")
-	for i := range lines {
-		lines[i] = strings.TrimSpace(lines[i])
-	}
-	return lines, nil
+	fmt.Println("test files: ", len(files), files)
+	return len(files) > 0, nil
 }
 
 func (goTest) WithCoverage(to string) ArgOpt {
 	return combine(flagArg("-cover", ""), flagArgIf("-test.coverprofile", to))
 }
+func (goTest) Short(b bool) ArgOpt        { return flagBoolIf("-test.short", b) }
 func (goTest) Use(bin string) ArgOpt      { return extraArgIf("use", bin) }
 func (goTest) OS(os string) ArgOpt        { return envArgIf("GOOS", os) }
 func (goTest) ARCH(arch string) ArgOpt    { return envArgIf("GOARCH", arch) }
@@ -86,7 +96,24 @@ func runGoTest(opts ...ArgOpt) error {
 	return runVGo("test", args)
 }
 
-func callGo(env map[string]string, cmd string, opts []string) (string, error) {
+func getLines(out string, err error) ([]string, error) {
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(out, "\n")
+	res := lines[:0]
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if len(line) > 0 {
+			res = append(res, line)
+		}
+	}
+
+	return res, nil
+}
+
+func callGo(env map[string]string, cmd string, opts ...string) (string, error) {
 	args := []string{cmd}
 	args = append(args, opts...)
 	return sh.OutputWith(env, mg.GoCmd(), args...)
@@ -147,6 +174,13 @@ func flagArgIf(flag, value string) ArgOpt {
 		return nil
 	}
 	return flagArg(flag, value)
+}
+
+func flagBoolIf(flag string, b bool) ArgOpt {
+	if b {
+		return flagArg(flag, "")
+	}
+	return nil
 }
 
 func combine(opts ...ArgOpt) ArgOpt {

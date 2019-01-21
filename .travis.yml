@@ -39,6 +39,11 @@ before_install:
       echo "Commit $(git rev-parse HEAD) doesn't match expected commit $TRAVIS_COMMIT"
       exit 1
     fi
+  - |
+    # install mage
+    go get -u -d github.com/magefile/mage
+    cd $GOPATH/src/github.com/magefile/mage
+    go run bootstrap.go
 
 script: |
-    go test -cover -v ./...
+  mage test

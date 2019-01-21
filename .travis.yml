@@ -48,6 +48,7 @@ jobs:
       script:
         - mage -v build:mage # cross compile mage target
         - mage -v build:test # cross compile tests
+        - file build/github.com/elastic/go-txfile/go-txfile github.com/elastic/go-txfile
         - docker run -v $GOPATH/src:/go/src -w /go/src/github.com/elastic/go-txfile -e TEST_USE_BIN=1 --rm $DOCKER_IMAGE ./build/mage-linux-arm -v test
 
 

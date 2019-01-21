@@ -23,25 +23,34 @@ import (
 	"github.com/magefile/mage/mg"
 )
 
-type Regsitry struct {
+// Registry of available cross build environment providers.
+type Registry struct {
 	table map[OSArch]Provider
 }
 
+// Provider defines available functionality all cross build providers MUST implement.
 type Provider interface {
+	// Build the environment
 	Build() error
+
+	// Run command within environment.
 	Run(env map[string]string, cmdAndArgs ...string) error
 }
 
+// OSArch tuple.
 type OSArch struct {
 	OS   string
 	Arch string
 }
 
-func NewRegistry(tbl map[OSArch]Provider) *Regsitry {
-	return &Regsitry{tbl}
+// NewRegistry creates a new Regsitry.
+func NewRegistry(tbl map[OSArch]Provider) *Registry {
+	return &Registry{tbl}
 }
 
-func (r *Regsitry) Find(os, arch string) (Provider, error) {
+// Find finds a provider by OS and Architecture name.
+// Returns error if no provider can be found.
+func (r *Registry) Find(os, arch string) (Provider, error) {
 	p := r.table[OSArch{os, arch}]
 	if p == nil {
 		return nil, fmt.Errorf("No provider for %v:%v defined", os, arch)
@@ -49,7 +58,9 @@ func (r *Regsitry) Find(os, arch string) (Provider, error) {
 	return p, nil
 }
 
-func (r *Regsitry) With(os, arch string, fn func(Provider) error) error {
+// With calls fn with a provider matching the requires OS and ARCH. Returns
+// and error if no provider can be found or function itself errors.
+func (r *Registry) With(os, arch string, fn func(Provider) error) error {
 	p, err := r.Find(os, arch)
 	if err != nil {
 		return err

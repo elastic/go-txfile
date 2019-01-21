@@ -23,6 +23,7 @@ import (
 	"github.com/magefile/mage/sh"
 )
 
+// DockerImage provides based on downloadable docker images.
 type DockerImage struct {
 	Image   string
 	Workdir string
@@ -30,10 +31,13 @@ type DockerImage struct {
 	Env     map[string]string
 }
 
+// Build pulls the required image.
 func (p DockerImage) Build() error {
 	return sh.Run("docker", "pull", p.Image)
 }
 
+// Run executes the command in a temporary docker container. The container is
+// deleted after its execution.
 func (p DockerImage) Run(env map[string]string, cmdAndArgs ...string) error {
 	spec := []string{"run", "--rm", "-i", "-t"}
 	for k, v := range mergeEnv(p.Env, env) {

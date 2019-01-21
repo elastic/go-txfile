@@ -82,7 +82,8 @@ func TestTxFile(t *testing.T) {
 			title := fmt.Sprintf("min=%v,max=%v,expected=%v", min, max, expected)
 
 			assert.Run(title, func(assert *assertions) {
-				if expected > uint64(maxUint) {
+				fmt.Printf("maxUint: %v, expected: %v\n", maxUint, expected)
+				if expected > uint64(maxMmapSize) {
 					assert.Skip("unsatisfyable tests on 32bit system")
 				}
 

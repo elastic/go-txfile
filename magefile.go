@@ -33,6 +33,7 @@ import (
 
 	"github.com/elastic/go-txfile/dev-tools/lib/mage/gotool"
 	"github.com/elastic/go-txfile/dev-tools/lib/mage/mgenv"
+	"github.com/elastic/go-txfile/dev-tools/lib/mage/xbuild"
 )
 
 // Info namespace is used to print additional docs, help messages, and other info.
@@ -58,10 +59,37 @@ var (
 	envFailFast   = mgenv.Bool("FAIL_FAST", false, "(bool) do not run other tasks on failure")
 )
 
+var xProviders = xbuild.NewRegistry(map[xbuild.OSArch]xbuild.Provider{
+	xbuild.OSArch{"linux", "arm"}: &xbuild.DockerImage{
+		Image:   "balenalib/revpi-core-3-alpine-golang:latest-edge-build",
+		Workdir: "/go/src/github.com/elastic/go-txfile",
+		Volumes: map[string]string{
+			filepath.Join(os.Getenv("GOPATH"), "src"): "/go/src",
+		},
+	},
+})
+
 // targets
 
-// Env prints the list of defined environment variables
+// Env prints environment info
 func (Info) Env() {
+	printTitle("Mage environment variables")
+	for _, k := range mgenv.Keys() {
+		v, _ := mgenv.Find(k)
+		fmt.Printf("%v=%v\n", k, v.Get())
+	}
+	fmt.Println()
+
+	printTitle("Go info")
+	sh.RunV(mg.GoCmd(), "env")
+	fmt.Println()
+
+	printTitle("docker info")
+	sh.RunV("docker", "version")
+}
+
+// Vars prints the list of registered environment variables
+func (Info) Vars() {
 	for _, k := range mgenv.Keys() {
 		v, _ := mgenv.Find(k)
 		fmt.Printf("%v=%v  : %v\n", k, v.Default(), v.Doc())
@@ -114,6 +142,16 @@ func (Build) Test() error {
 // Test runs the unit tests.
 func Test() error {
 	mg.Deps(Prepare.Dirs)
+
+	if crossBuild() {
+		return withXProvider(func(p xbuild.Provider) error {
+			mg.Deps(Build.Mage, Build.Test)
+
+			env := mgenv.MakeEnv()
+			env["TEST_USE_BIN"] = "true"
+			return p.Run(env, "./build/mage-linux-arm", useIf("-v", mg.Verbose()), "test")
+		})
+	}
 
 	return withList(gotool.ListProjectPackages, failFastEach, func(pkg string) error {
 		fmt.Println("Test:", pkg)
@@ -231,4 +269,20 @@ func (m multiErr) Error() string {
 		}
 	}
 	return bld.String()
+}
+
+func printTitle(s string) {
+	fmt.Println(s)
+	for range s {
+		fmt.Print("=")
+	}
+	fmt.Println()
+}
+
+func crossBuild() bool {
+	return envBuildArch != runtime.GOARCH || envBuildOS != runtime.GOOS
+}
+
+func withXProvider(fn func(p xbuild.Provider) error) error {
+	return xProviders.With(envBuildOS, envBuildArch, fn)
 }

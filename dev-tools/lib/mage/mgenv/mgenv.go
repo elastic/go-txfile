@@ -46,6 +46,16 @@ func makeVar(name, other, doc string) Var {
 	return v
 }
 
+// MakeEnv builds a dictionary of defined environment variables, such that
+// these can be passed to other processes (e.g. providers)
+func MakeEnv() map[string]string {
+	m := make(map[string]string, len(envVars))
+	for k, v := range envVars {
+		m[k] = v.Get()
+	}
+	return m
+}
+
 // Keys returns the keys of registered environment variables. The keys returned
 // are sorted.
 // Note: The returned slice must not be changed or appended to.

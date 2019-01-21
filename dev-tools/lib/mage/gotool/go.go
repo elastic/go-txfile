@@ -18,7 +18,6 @@
 package gotool
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -67,8 +66,6 @@ func HasTests(pkg string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-
-	fmt.Println("test files: ", len(files), files)
 	return len(files) > 0, nil
 }
 

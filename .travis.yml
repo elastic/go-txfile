@@ -48,8 +48,9 @@ jobs:
       script:
         - mage -v build:mage # cross compile mage target
         - mage -v build:test # cross compile tests
-        - file build/github.com/elastic/go-txfile/go-txfile github.com/elastic/go-txfile
-        - docker run -v $GOPATH/src:/go/src -w /go/src/github.com/elastic/go-txfile -e TEST_USE_BIN=1 --rm $DOCKER_IMAGE ./build/mage-linux-arm -v test
+        - file build/github.com/elastic/go-txfile/go-txfile
+        - docker run --rm -i -t $DOCKER_IMAGE go env
+        - docker run -v $GOPATH/src:/go/src -w /go/src/github.com/elastic/go-txfile -e TEST_USE_BIN=1 --rm -i -t $DOCKER_IMAGE ./build/mage-linux-arm -v test
 
 
 # Check we're testing the correct commit (Snippet from: https://github.com/travis-ci/travis-ci/issues/7459#issuecomment-287040521)

@@ -36,6 +36,10 @@ import (
 // pages of type PageSize. Pages within the file are only accessible by page IDs
 // from within active transactions.
 type File struct {
+	// Atomic fields.
+	// Do not move: Must be 64bit-word aligned on some architectures.
+	txids uint64
+
 	observer Observer
 
 	path     string
@@ -59,8 +63,6 @@ type File struct {
 	metaActive int
 
 	stats FileStats
-
-	txids uint64
 }
 
 // internal contants
@@ -336,15 +338,25 @@ func (f *File) beginTx(settings TxOptions) (*Tx, reason) {
 	}
 
 	tracef("request new transaction (readonly: %v)\n", settings.Readonly)
+
+	// Acquire transaction log.
+	// Unlock on panic, so applications will not be blocked in case they try to
+	// defer some close operations on the file.
+	ok := false
 	lock := f.locks.TxLock(settings.Readonly)
 	lock.Lock()
-	tracef("init new transaction (readonly: %v)\n", settings.Readonly)
+	defer cleanup.IfNot(&ok, lock.Unlock)
 
 	txid := atomic.AddUint64(&f.txids, 1)
+
+	tracef("init new transaction (readonly: %v)\n", settings.Readonly)
+
 	tx := newTx(f, txid, lock, settings)
 	tracef("begin transaction: %p (readonly: %v)\n", tx, settings.Readonly)
 
 	tx.onBegin()
+
+	ok = true
 	return tx, nil
 }
 

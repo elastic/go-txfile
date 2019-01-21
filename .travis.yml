@@ -42,7 +42,7 @@ before_install:
   - |
     # install mage
     go get -u -d github.com/magefile/mage
-    go run $GOPATH/src/github.com/magefile/mage/bootstrap.go
+    (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
 
 script: |
   pwd

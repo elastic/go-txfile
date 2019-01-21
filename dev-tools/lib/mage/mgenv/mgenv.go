@@ -24,6 +24,7 @@ import (
 	"strconv"
 )
 
+// Var holds an environment variables name, default value and doc string.
 type Var struct {
 	name  string
 	other string
@@ -45,30 +46,43 @@ func makeVar(name, other, doc string) Var {
 	return v
 }
 
+// Keys returns the keys of registered environment variables. The keys returned
+// are sorted.
+// Note: The returned slice must not be changed or appended to.
 func Keys() []string {
 	return envKeys
 }
 
+// Find returns a registered Var by name.
 func Find(name string) (Var, bool) {
 	v, ok := envVars[name]
 	return v, ok
 }
 
+// String registers an environment variable and reads the current contents.
 func String(name, other, doc string) string {
 	v := makeVar(name, other, doc)
 	return v.Get()
 }
 
+// Bool registers an environment variable and interprets the current variable as bool.
 func Bool(name string, other bool, doc string) bool {
 	v := makeVar(name, fmt.Sprint(other), doc)
 	b, err := strconv.ParseBool(v.Get())
 	return err == nil && b
 }
 
-func (v Var) Name() string    { return v.name }
-func (v Var) Default() string { return v.other }
-func (v Var) Doc() string     { return v.doc }
+// Name returns the environment variables name
+func (v Var) Name() string { return v.name }
 
+// Default returns the environment variables default value as string.
+func (v Var) Default() string { return v.other }
+
+// Doc returns the doc-string.
+func (v Var) Doc() string { return v.doc }
+
+// Get reads an environment variable. Get returns the default value if the
+// variable is not present or empty.
 func (v Var) Get() string {
 	val := os.Getenv(v.name)
 	if val == "" {

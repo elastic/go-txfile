@@ -26,6 +26,8 @@ import (
 	"github.com/magefile/mage/sh"
 )
 
+// Args holds parameters, environment variables and flag information used to
+// pass to the go tool.
 type Args struct {
 	extra map[string]string // extra flags one can pass to the command
 	env   map[string]string
@@ -33,20 +35,25 @@ type Args struct {
 	pos   []string
 }
 
+// ArgOpt is a functional option adding info to Args once executed.
 type ArgOpt func(args *Args)
 
 type goTest func(opts ...ArgOpt) error
 
+// Test runs `go test` and provides optionals for adding command line arguments.
 var Test goTest = runGoTest
 
+// ListProjectPackages lists all packages in the current project
 func ListProjectPackages() ([]string, error) {
 	return ListPackages("./...")
 }
 
+// ListPackages calls `go list` for every package spec given.
 func ListPackages(pkgs ...string) ([]string, error) {
 	return getLines(callGo(nil, "list", pkgs...))
 }
 
+// ListTestFiles lists all go and cgo test files available in a package.
 func ListTestFiles(pkg string) ([]string, error) {
 	const tmpl = `{{ range .TestGoFiles }}{{ printf "%s\n" . }}{{ end }}` +
 		`{{ range .XTestGoFiles }}{{ printf "%s\n" . }}{{ end }}`
@@ -54,6 +61,7 @@ func ListTestFiles(pkg string) ([]string, error) {
 	return getLines(callGo(nil, "list", "-f", tmpl, pkg))
 }
 
+// HasTests returns true if the given package contains test files.
 func HasTests(pkg string) (bool, error) {
 	files, err := ListTestFiles(pkg)
 	if err != nil {
@@ -199,6 +207,7 @@ func buildArgs(opts []ArgOpt) *Args {
 	return a
 }
 
+// Extra sets a special k/v pair to be interpreted by the execution function.
 func (a *Args) Extra(k, v string) {
 	if a.extra == nil {
 		a.extra = map[string]string{}
@@ -206,6 +215,7 @@ func (a *Args) Extra(k, v string) {
 	a.extra[k] = v
 }
 
+// Val returns a special functions value for a given key.
 func (a *Args) Val(k string) string {
 	if a.extra == nil {
 		return ""
@@ -213,6 +223,7 @@ func (a *Args) Val(k string) string {
 	return a.extra[k]
 }
 
+// Env sets an environmant variable to be passed to the child process on exec.
 func (a *Args) Env(k, v string) {
 	if a.env == nil {
 		a.env = map[string]string{}
@@ -220,6 +231,7 @@ func (a *Args) Env(k, v string) {
 	a.env[k] = v
 }
 
+// Flag adds a flag to be passed to the child process on exec.
 func (a *Args) Flag(flag, value string) {
 	if a.flags == nil {
 		a.flags = map[string]string{}
@@ -227,6 +239,7 @@ func (a *Args) Flag(flag, value string) {
 	a.flags[flag] = value
 }
 
+// Add adds a positional argument to be passed to the child process on exec.
 func (a *Args) Add(p string) {
 	a.pos = append(a.pos, p)
 }

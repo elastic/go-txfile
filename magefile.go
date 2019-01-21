@@ -111,7 +111,7 @@ func (Build) Test() error {
 	})
 }
 
-// Run package unit tests
+// Test runs the unit tests.
 func Test() error {
 	mg.Deps(Prepare.Dirs)
 

@@ -32,12 +32,35 @@ jobs:
       go: $GO_CROSS_VERSION
       script: eval $GO_CHECK_CROSS_SCRIPT
 
-    # arm testing
-    - env:
+    # arm testing go1.10
+    - name: 32Bit ARM go1.10
+      env:
         - BUILD_OS=linux
         - BUILD_ARCH=arm
         - DOCKER_IMAGE=balenalib/revpi-core-3-alpine-golang:latest-edge-build
-      go: $GO_CROSS_VERSION
+      go: '1.10'
+      services:
+        - docker
+      before_install:
+        - docker pull $DOCKER_IMAGE
+        - docker run --rm --privileged multiarch/qemu-user-static:register --reset
+        - |
+          go get -u -d github.com/magefile/mage
+          (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
+      script:
+        - mage -v build:mage # cross compile mage target
+        - mage -v build:test # cross compile tests
+        - file build/github.com/elastic/go-txfile/go-txfile
+        - docker run --rm -i -t balenalib/revpi-core-3-alpine-golang:latest-edge-build go env
+        - docker run -v $GOPATH/src:/go/src -w /go/src/github.com/elastic/go-txfile -e TEST_USE_BIN=1 --rm -i -t $DOCKER_IMAGE ./build/mage-linux-arm -v test
+
+    # arm testing go1.11
+    - name: 32Bit ARM go1.11
+      env:
+        - BUILD_OS=linux
+        - BUILD_ARCH=arm
+        - DOCKER_IMAGE=balenalib/revpi-core-3-alpine-golang:latest-edge-build
+      go: '1.11'
       services:
         - docker
       before_install:

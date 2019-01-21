@@ -22,13 +22,16 @@ env:
 jobs:
   include:
     # try to cross compile to untested OSes
-    - env: TARGET=openbsd
+    - name: XBuild OpenBSD
+      env: TARGET=openbsd
       go: $GO_CROSS_VERSION
       script: eval $GO_CHECK_CROSS_SCRIPT
-    - env: TARGET=netbsd
+    - name: XBuild NetBSD
+      env: TARGET=netbsd
       go: $GO_CROSS_VERSION
       script: eval $GO_CHECK_CROSS_SCRIPT
-    - env: TARGET=freebsd
+    - name: XBuild FreeBSD
+      env: TARGET=freebsd
       go: $GO_CROSS_VERSION
       script: eval $GO_CHECK_CROSS_SCRIPT
 

@@ -104,7 +104,13 @@ func Test() error {
 
 		tst := gotool.Test
 		fmt.Println("Test:", pkg)
-		bin := path.Join(buildHome, pkg, path.Base(pkg))
+
+		home := path.Join(buildHome, pkg)
+		if err := mkdir(home); err != nil {
+			return err
+		}
+
+		bin := path.Join(home, path.Base(pkg))
 		return tst(
 			tst.Use(useIf(bin, existsFile(bin) && envTestUseBin)),
 			tst.WithCoverage(path.Join(buildHome, pkg, "cover.out")),

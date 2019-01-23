@@ -13,6 +13,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Removed
 
 ### Fixed
+
+## [0.0.5]
+
+### Fixed
 - Panic on atomic operation (arm, x86-32) and File lock not released when panic occurs. PR #31
 
 ## [0.0.4]
@@ -53,7 +57,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - Windows Fix: Max mmaped area must not exceed actual file size on windows. PR #11
 
 
-[Unreleased]: https://github.com/elastic/go-txfile/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/elastic/go-txfile/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/elastic/go-txfile/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/elastic/go-txfile/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/elastic/go-txfile/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/elastic/go-txfile/compare/v0.0.1...v0.0.2

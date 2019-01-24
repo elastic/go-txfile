@@ -13,7 +13,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Removed
 
 ### Fixed
-- Fix flush callback not be executed on success. PR #34
+- Fix flush callback not being executed on success. PR #34
 
 ## [0.0.5]
 

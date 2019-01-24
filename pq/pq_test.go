@@ -74,6 +74,22 @@ func TestQueueOperations(testing *testing.T) {
 		t.Equal(0, qu.len())
 	}))
 
+	t.Run("flush callback is called", func(t *mint.T) {
+		var count int
+
+		cfg := defaultConfig
+		cfg.Queue.Flushed = func(n uint) {
+			count += int(n)
+		}
+
+		qu, teardown := setupQueue(t, cfg)
+		defer teardown()
+
+		qu.append("a", "b", "c")
+		qu.flush()
+		t.Equal(3, count)
+	})
+
 	t.Run("scenarios", func(t *mint.T) {
 		sz := int(defaultConfig.File.PageSize)
 

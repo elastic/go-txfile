@@ -17,53 +17,48 @@ matrix:
 
 shared:
   go_cross_version: &go_cross_version '1.11'
+  bsd:
+    script: &go_bsd_script
+    - eval 'GOOS=$TARGET go build ./...'
+  arm:
+    before_install: &go_arm_before_install
+      - docker run --rm --privileged multiarch/qemu-user-static:register --reset
+      - |
+        go get -u -d github.com/magefile/mage
+        (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
+    script: &go_arm_script
+      - mage -v test
 
-env:
-  global:
-    - GO_CHECK_CROSS_SCRIPT='GOOS=$TARGET go build ./...'
 jobs:
   include:
     # try to cross compile to untested OSes
     - name: XBuild OpenBSD
       env: TARGET=openbsd
       go: *go_cross_version
-      script: eval $GO_CHECK_CROSS_SCRIPT
-      before_install:
-        - which travis_export_go
-        - file $(which travis_export_go)
+      script: *go_bsd_script
 
     - name: XBuild NetBSD
       env: TARGET=netbsd
       go: *go_cross_version
-      script: eval $GO_CHECK_CROSS_SCRIPT
+      script: *go_bsd_script
     - name: XBuild FreeBSD
       env: TARGET=freebsd
       go: *go_cross_version
-      script: eval $GO_CHECK_CROSS_SCRIPT
+      script: *go_bsd_script
 
     - name: 32Bit ARM go1.10
       env: [BUILD_OS=linux, BUILD_ARCH=arm]
       go: '1.10'
       services: [docker]
-      before_install:
-        - docker run --rm --privileged multiarch/qemu-user-static:register --reset
-        - |
-          go get -u -d github.com/magefile/mage
-          (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
-      script:
-        - mage -v test
+      before_install: *go_arm_before_install
+      script: *go_arm_script
 
     - name: 32Bit ARM go1.11
       env: [BUILD_OS=linux, BUILD_ARCH=arm]
       go: '1.11'
       services: [docker]
-      before_install:
-        - docker run --rm --privileged multiarch/qemu-user-static:register --reset
-        - |
-          go get -u -d github.com/magefile/mage
-          (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
-      script:
-        - mage -v test
+      before_install: *go_arm_before_install
+      script: *go_arm_script
 
 # Check we're testing the correct commit (Snippet from: https://github.com/travis-ci/travis-ci/issues/7459#issuecomment-287040521)
 before_install:

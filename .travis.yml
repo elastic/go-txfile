@@ -26,6 +26,10 @@ jobs:
       env: TARGET=openbsd
       go: '$GO_CROSS_VERSION'
       script: eval $GO_CHECK_CROSS_SCRIPT
+      before_install:
+        - which travis_export_go
+        - file $(which travis_export_go)
+
     - name: XBuild NetBSD
       env: TARGET=netbsd
       go: '$GO_CROSS_VERSION'

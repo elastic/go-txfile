@@ -24,7 +24,7 @@ jobs:
     # try to cross compile to untested OSes
     - name: XBuild OpenBSD
       env: TARGET=openbsd
-      go: '$GO_CROSS_VERSION'
+      go: '1.11'
       script: eval $GO_CHECK_CROSS_SCRIPT
       before_install:
         - which travis_export_go

@@ -24,15 +24,15 @@ jobs:
     # try to cross compile to untested OSes
     - name: XBuild OpenBSD
       env: TARGET=openbsd
-      go: $GO_CROSS_VERSION
+      go: '$GO_CROSS_VERSION'
       script: eval $GO_CHECK_CROSS_SCRIPT
     - name: XBuild NetBSD
       env: TARGET=netbsd
-      go: $GO_CROSS_VERSION
+      go: '$GO_CROSS_VERSION'
       script: eval $GO_CHECK_CROSS_SCRIPT
     - name: XBuild FreeBSD
       env: TARGET=freebsd
-      go: $GO_CROSS_VERSION
+      go: '$GO_CROSS_VERSION'
       script: eval $GO_CHECK_CROSS_SCRIPT
 
     - name: 32Bit ARM go1.10

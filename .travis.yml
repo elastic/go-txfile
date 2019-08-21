@@ -10,6 +10,9 @@ go:
   - '1.12'
   - 'tip'
 
+env:
+  - GO111MODULE=off
+
 matrix:
   exclude:
   - os: 'windows'
@@ -25,6 +28,7 @@ shared:
       - docker run --rm --privileged multiarch/qemu-user-static:register --reset
       - |
         go get -u -d github.com/magefile/mage
+        go get -u -d github.com/urso/magetools
         (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
     script: &go_arm_script
       - mage -v test

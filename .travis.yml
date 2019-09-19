@@ -6,8 +6,8 @@ os:
   - windows
 
 go:
-  - '1.11'
   - '1.12'
+  - '1.13'
   - 'tip'
 
 env:
@@ -50,14 +50,14 @@ jobs:
       go: *go_cross_version
       script: *go_bsd_script
 
-    - name: 32Bit ARM go1.11
+    - name: 32Bit ARM go1.12
       env: [BUILD_OS=linux, BUILD_ARCH=arm]
       go: '1.11'
       services: [docker]
       before_install: *go_arm_before_install
       script: *go_arm_script
 
-    - name: 32Bit ARM go1.12
+    - name: 32Bit ARM go1.13
       env: [BUILD_OS=linux, BUILD_ARCH=arm]
       go: '1.12'
       services: [docker]

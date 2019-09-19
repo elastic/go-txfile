@@ -27,6 +27,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/magefile/mage/mg"
 	"github.com/magefile/mage/sh"
@@ -66,6 +67,13 @@ var (
 var xProviders = xbuild.NewRegistry(map[xbuild.OSArch]xbuild.Provider{
 	xbuild.OSArch{"linux", "arm"}: &xbuild.DockerImage{
 		Image:   "balenalib/revpi-core-3-alpine-golang:latest-edge-build",
+		Workdir: "/go/src/github.com/elastic/go-txfile",
+		Volumes: map[string]string{
+			filepath.Join(os.Getenv("GOPATH"), "src"): "/go/src",
+		},
+	},
+	xbuild.OSArch{"linux", runtime.GOARCH}: &xbuild.DockerImage{
+		Image:   golangVersionImage(),
 		Workdir: "/go/src/github.com/elastic/go-txfile",
 		Volumes: map[string]string{
 			filepath.Join(os.Getenv("GOPATH"), "src"): "/go/src",
@@ -116,16 +124,6 @@ func Clean() error {
 	return sh.Rm(buildHome)
 }
 
-// Mage builds the magefile binary for reuse
-func (Build) Mage() error {
-	mg.Deps(Prepare.Dirs)
-
-	goos := envBuildOS
-	goarch := envBuildArch
-	out := filepath.Join(buildHome, fmt.Sprintf("mage-%v-%v", goos, goarch))
-	return sh.Run("mage", "-f", "-goos="+goos, "-goarch="+goarch, "-compile", out)
-}
-
 // Test builds the per package unit test executables.
 func (Build) Test() error {
 	mg.Deps(Prepare.Dirs)
@@ -147,60 +145,56 @@ func (Build) Test() error {
 	})
 }
 
+// Shell tries to start an interactive shell if a crossbuild environment is configured.
+func (Build) Shell() error {
+	if !crossBuild() {
+		return errors.New("No cross build environment configured")
+	}
+	return withXProvider((xbuild.Provider).Shell)
+}
+
 // Test runs the unit tests.
 func Test() error {
 	mg.Deps(Prepare.Dirs)
-	goRun := gotool.New(clitool.NewCLIExecutor(true), mg.GoCmd())
+	return withExecEnv(func(executor clitool.Executor) error {
+		testUseBin := envTestUseBin
+		if crossBuild() {
+			mg.Deps(Build.Test)
+			testUseBin = true
+		}
 
-	if crossBuild() {
-		fmt.Println("Run cross build test")
-		return withXProvider(func(p xbuild.Provider) error {
-			mg.Deps(Build.Mage, Build.Test)
+		goRun := gotool.New(executor, mg.GoCmd())
+		return ctrl.ForEachFrom(goRun.List.ProjectPackages, failFastEach, func(pkg string) error {
+			fmt.Println("Test:", pkg)
+			if b, err := goRun.List.HasTests(pkg); !b {
+				fmt.Printf("Skipping %v: No tests found\n", pkg)
+				return err
+			}
 
-			env := mgenv.MakeEnv()
-			env["TEST_USE_BIN"] = "true"
-			fmt.Println("run mage-linux-arm via docker")
-			return p.Run(env, "./build/mage-linux-arm", useIf("-v", mg.Verbose()), "test")
+			home := path.Join(buildHome, pkg)
+			if err := fs.MakeDirs(home); err != nil {
+				return err
+			}
+
+			tst := goRun.Test
+			bin := path.Join(home, path.Base(pkg))
+			useBinary := fs.ExistsFile(bin) && testUseBin
+			fmt.Println("Run test for package '%v' (binary: %v)", pkg, useBinary)
+
+			return tst(
+				context.Background(),
+				tst.UseBinaryIf(bin, useBinary),
+				tst.WithCoverage(path.Join(home, "cover.out")),
+				tst.Short(envTestShort),
+				tst.Out(bin),
+				tst.Package(pkg),
+				tst.Verbose(true),
+			)
 		})
-	}
-
-	return ctrl.ForEachFrom(goRun.List.ProjectPackages, failFastEach, func(pkg string) error {
-		fmt.Println("Test:", pkg)
-		if b, err := goRun.List.HasTests(pkg); !b {
-			fmt.Printf("Skipping %v: No tests found\n", pkg)
-			return err
-		}
-
-		home := path.Join(buildHome, pkg)
-		if err := fs.MakeDirs(home); err != nil {
-			return err
-		}
-
-		tst := goRun.Test
-		bin := path.Join(home, path.Base(pkg))
-		useBinary := fs.ExistsFile(bin) && envTestUseBin
-		fmt.Println("Run test for package '%v' (binary: %v)", pkg, useBinary)
-
-		return tst(
-			context.Background(),
-			tst.UseBinaryIf(bin, useBinary),
-			tst.WithCoverage(path.Join(home, "cover.out")),
-			tst.Short(envTestShort),
-			tst.Out(bin),
-			tst.Package(pkg),
-			tst.Verbose(true),
-		)
 	})
 }
 
 // helpers
-
-func useIf(s string, b bool) string {
-	if b {
-		return s
-	}
-	return ""
-}
 
 func failFastEach(ops ...ctrl.Operation) error {
 	mode := ctrl.Each
@@ -222,6 +216,32 @@ func crossBuild() bool {
 	return envBuildArch != runtime.GOARCH || envBuildOS != runtime.GOOS
 }
 
-func withXProvider(fn func(p xbuild.Provider) error) error {
+func withXProvider(fn func(xbuild.Provider) error) error {
 	return xProviders.With(envBuildOS, envBuildArch, fn)
+}
+
+func withExecEnv(fn func(clitool.Executor) error) error {
+	if crossBuild() {
+		return withXProvider(func(p xbuild.Provider) error {
+			e, err := p.Executor(mg.Verbose())
+			if err != nil {
+				return err
+			}
+
+			return fn(e)
+		})
+	}
+
+	e := clitool.NewCLIExecutor(mg.Verbose())
+	return fn(e)
+}
+
+func golangVersionImage() string {
+	version := runtime.Version()
+	if strings.HasPrefix(version, "go") {
+		version = version[2:]
+	} else {
+		version = "latest"
+	}
+	return fmt.Sprintf("golang:%v", version)
 }

@@ -51,7 +51,7 @@ jobs:
       script: *go_bsd_script
 
     - name: 32Bit ARM go1.12
-      env: [BUILD_OS=linux, BUILD_ARCH=arm]
+      env: [BUILD_OS=linux, BUILD_ARCH=arm, GO111MODULE=on]
       go: '1.12'
       services: [docker]
       before_install: *go_arm_before_install

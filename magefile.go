@@ -156,17 +156,19 @@ func (Build) Shell() error {
 // Test runs the unit tests.
 func Test() error {
 	mg.Deps(Prepare.Dirs)
-	return withExecEnv(func(executor clitool.Executor) error {
+	return withExecEnv(func(local, runner clitool.Executor) error {
 		testUseBin := envTestUseBin
 		if crossBuild() {
 			mg.Deps(Build.Test)
 			testUseBin = true
 		}
 
-		goRun := gotool.New(executor, mg.GoCmd())
-		return ctrl.ForEachFrom(goRun.List.ProjectPackages, failFastEach, func(pkg string) error {
+		goLocal := gotool.New(local, mg.GoCmd())
+		goRun := gotool.New(runner, mg.GoCmd())
+
+		return ctrl.ForEachFrom(goLocal.List.ProjectPackages, failFastEach, func(pkg string) error {
 			fmt.Println("Test:", pkg)
-			if b, err := goRun.List.HasTests(pkg); !b {
+			if b, err := goLocal.List.HasTests(pkg); !b {
 				fmt.Printf("Skipping %v: No tests found\n", pkg)
 				return err
 			}
@@ -179,7 +181,7 @@ func Test() error {
 			tst := goRun.Test
 			bin := path.Join(home, path.Base(pkg))
 			useBinary := fs.ExistsFile(bin) && testUseBin
-			fmt.Println("Run test for package '%v' (binary: %v)", pkg, useBinary)
+			fmt.Printf("Run test for package '%v' (binary: %v)\n", pkg, useBinary)
 
 			return tst(
 				context.Background(),
@@ -220,7 +222,9 @@ func withXProvider(fn func(xbuild.Provider) error) error {
 	return xProviders.With(envBuildOS, envBuildArch, fn)
 }
 
-func withExecEnv(fn func(clitool.Executor) error) error {
+func withExecEnv(fn func(local, remote clitool.Executor) error) error {
+	local := clitool.NewCLIExecutor(mg.Verbose())
+
 	if crossBuild() {
 		return withXProvider(func(p xbuild.Provider) error {
 			e, err := p.Executor(mg.Verbose())
@@ -228,12 +232,11 @@ func withExecEnv(fn func(clitool.Executor) error) error {
 				return err
 			}
 
-			return fn(e)
+			return fn(local, e)
 		})
 	}
 
-	e := clitool.NewCLIExecutor(mg.Verbose())
-	return fn(e)
+	return fn(local, local)
 }
 
 func golangVersionImage() string {

@@ -5,6 +5,8 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
+github.com/magefile/mage v1.9.0 h1:t3AU2wNwehMCW97vuqQLtw6puppWXHO+O2MHo5a50XE=
+github.com/magefile/mage v1.9.0/go.mod h1:z5UZb/iS3GoOSn0JgWuiw7dxlurVYTu+/jHXqQg881A=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/testify v1.2.2 h1:bSDNvY7ZPG5RlJ8otE/7V6gMiyenm9RtJ7IUVIAoJ1w=
@@ -15,6 +17,8 @@ github.com/urso/go-bin v0.0.0-20180220135811-781c575c9f0e h1:NiofbjIUI5gR+ybDsGS
 github.com/urso/go-bin v0.0.0-20180220135811-781c575c9f0e/go.mod h1:6GfHrdWBQYjFRIznu7XuQH4lYB2w8nO4bnImVKkzPOM=
 github.com/urso/magetools v0.0.0-20190821191851-80b79817d130 h1:QnAXoQpHFoFdqsQzOU9xDt078ucu7a4lo1eQX+nIhRI=
 github.com/urso/magetools v0.0.0-20190821191851-80b79817d130/go.mod h1:DFxTNgS/ExCGmmjVjSOgS2WjtfjKXgCyDzAFgbtovSA=
+github.com/urso/magetools v0.0.0-20190919040553-290c89e0c230 h1:Ft1EJ6JL0F/RV6o2qJ1Be+wYxjYUSfRA3srfHgSgojc=
+github.com/urso/magetools v0.0.0-20190919040553-290c89e0c230/go.mod h1:DFxTNgS/ExCGmmjVjSOgS2WjtfjKXgCyDzAFgbtovSA=
 github.com/urso/qcgen v0.0.0-20180131103024-0b059e7db4f4 h1:hhA8EBThzz9PztawVTycKvfETVuBqxAQ5keFlAVtbAw=
 github.com/urso/qcgen v0.0.0-20180131103024-0b059e7db4f4/go.mod h1:RspW+E2Yb7Fs7HclB2tiDaiu6Rp41BiIG4Wo1YaoXGc=
 golang.org/x/sys v0.0.0-20180802203216-0ffbfd41fbef h1:ESfhYoBNk2UQGmavscFPKfwmc4ZTB2+UdQYsVw6Bq9M=

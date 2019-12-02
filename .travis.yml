@@ -27,9 +27,9 @@ shared:
     before_install: &go_arm_before_install
       - docker run --rm --privileged multiarch/qemu-user-static:register --reset
       - |
-        go get -u -d github.com/magefile/mage
-        go get -u -d github.com/urso/magetools
-        (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
+        # install mage
+        (cd /tmp;
+         git clone https://github.com/magefile/mage && cd mage && go run bootstrap.go)
     script: &go_arm_script
       - mage -v test
 
@@ -72,9 +72,8 @@ before_install:
     fi
   - |
     # install mage
-    go get -u -d github.com/magefile/mage
-    go get -u -d github.com/urso/magetools
-    (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
+    (cd /tmp;
+     git clone https://github.com/magefile/mage && cd mage && go run bootstrap.go)
 
 script:
 - go env

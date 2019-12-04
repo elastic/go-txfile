@@ -11,7 +11,7 @@ go:
   - 'tip'
 
 env:
-  - GO111MODULE=off
+  - GO111MODULE=on
 
 matrix:
   exclude:
@@ -19,7 +19,7 @@ matrix:
     go: 'tip'
 
 shared:
-  go_cross_version: &go_cross_version '1.12'
+  go_cross_version: &go_cross_version '1.13'
   bsd:
     script: &go_bsd_script
     - eval 'GOOS=$TARGET go build ./...'
@@ -27,9 +27,9 @@ shared:
     before_install: &go_arm_before_install
       - docker run --rm --privileged multiarch/qemu-user-static:register --reset
       - |
-        go get -u -d github.com/magefile/mage
-        go get -u -d github.com/urso/magetools
-        (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
+        # install mage
+        (cd /tmp;
+         git clone https://github.com/magefile/mage && cd mage && go run bootstrap.go)
     script: &go_arm_script
       - mage -v test
 
@@ -51,15 +51,15 @@ jobs:
       script: *go_bsd_script
 
     - name: 32Bit ARM go1.12
-      env: [BUILD_OS=linux, BUILD_ARCH=arm]
-      go: '1.11'
+      env: [BUILD_OS=linux, BUILD_ARCH=arm, GO111MODULE=on]
+      go: '1.12'
       services: [docker]
       before_install: *go_arm_before_install
       script: *go_arm_script
 
     - name: 32Bit ARM go1.13
       env: [BUILD_OS=linux, BUILD_ARCH=arm]
-      go: '1.12'
+      go: '1.13'
       services: [docker]
       before_install: *go_arm_before_install
       script: *go_arm_script
@@ -72,9 +72,8 @@ before_install:
     fi
   - |
     # install mage
-    go get -u -d github.com/magefile/mage
-    go get -u -d github.com/urso/magetools
-    (cd $GOPATH/src/github.com/magefile/mage; go run bootstrap.go)
+    (cd /tmp;
+     git clone https://github.com/magefile/mage && cd mage && go run bootstrap.go)
 
 script:
 - go env

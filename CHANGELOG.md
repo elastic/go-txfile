@@ -5,14 +5,22 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Add FlagWaitLock to wait on Open until the file lock can be acquired. PR #42
 
 ### Changed
-- Create separate lock file on non windows systems. PR #42
 
 ### Deprecated
 
 ### Removed
+
+### Fixed
+
+## [0.0.7]
+
+### Added
+- Add FlagWaitLock to wait on Open until the file lock can be acquired. PR #42
+
+### Changed
+- Create separate lock file on non windows systems. PR #42
 
 ### Fixed
 - Open by default returns an error if the file lock can not be acquired. PR #42
@@ -65,7 +73,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - Windows Fix: Max mmaped area must not exceed actual file size on windows. PR #11
 
 
-[Unreleased]: https://github.com/elastic/go-txfile/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/elastic/go-txfile/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/elastic/go-txfile/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/elastic/go-txfile/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/elastic/go-txfile/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/elastic/go-txfile/compare/v0.0.3...v0.0.4

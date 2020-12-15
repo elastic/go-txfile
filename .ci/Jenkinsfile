@@ -67,11 +67,14 @@ pipeline {
                 unstash 'source'
                 withMageEnv(version: "${GO_VERSION}"){
                   dir("${BASE_DIR}"){
-                    sh(label: "test for ${GO_VERSION} in ${PLATFORM}", script: '''
-go env
-mage -v test''')
+                    sh(label: "test for ${GO_VERSION} in ${PLATFORM}", script: '.ci/test.sh')
                   }
                 }
+              }
+            }
+            post {
+              always {
+                junit(allowEmptyResults: true, keepLongStdio: true, testResults: "${BASE_DIR}/build/*.xml")
               }
             }
           }

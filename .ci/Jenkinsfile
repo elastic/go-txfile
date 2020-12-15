@@ -74,6 +74,7 @@ pipeline {
             }
             post {
               always {
+                archiveArtifacts "${BASE_DIR}/build/*.xml"
                 junit(allowEmptyResults: true, keepLongStdio: true, testResults: "${BASE_DIR}/build/*.xml")
               }
             }

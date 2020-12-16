@@ -43,7 +43,7 @@ pipeline {
           }
           axis {
             name 'PLATFORM'
-            values 'ubuntu-18 && immutable', 'macosx' // TODO: support windows, 'windows-2019 && immutable'
+            values 'ubuntu-18 && immutable', 'macosx', 'windows-2019 && immutable'
           }
         }
         excludes {
@@ -67,7 +67,12 @@ pipeline {
                 unstash 'source'
                 withMageEnv(version: "${GO_VERSION}"){
                   dir("${BASE_DIR}"){
-                    sh(label: "test for ${GO_VERSION} in ${PLATFORM}", script: '.ci/test.sh')
+                    whenTrue(isUnix()) {
+                      sh(label: "go test for ${GO_VERSION} in ${PLATFORM}", script: '.ci/test.sh')
+                    }
+                    whenFalse(isUnix()) {
+                      bat(label: "go test for ${GO_VERSION} in ${PLATFORM}", script: '.ci/test.bat')
+                    }
                   }
                 }
               }

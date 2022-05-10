@@ -21,6 +21,6 @@ jobs:
 
     - name: Run test
       uses: magefile/mage-action@v1
-        with:
-          version: latest
-          args: test
+      with:
+        version: latest
+        args: test

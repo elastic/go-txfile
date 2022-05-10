@@ -19,8 +19,8 @@ jobs:
       with:
         go-version: '>=1.17.0'
 
-    - name: Install dependencies
-      run:  go get -u github.com/magefile/mage
-
     - name: Run test
-      run: mage -v test
+      uses: magefile/mage-action@v1
+        with:
+          version: latest
+          args: test

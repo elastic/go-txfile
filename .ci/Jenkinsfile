@@ -39,7 +39,7 @@ pipeline {
         axes {
           axis {
             name 'GO_VERSION'
-            values '1.12', '1.13', '1.15', '1.17'
+            values '1.12', '1.13', '1.15', 
           }
           axis {
             name 'PLATFORM'
@@ -57,6 +57,7 @@ pipeline {
               values '1.15', '1.17'
             }
           }
+          // Mac os builds are disabled. See https://github.com/elastic/go-txfile/issues/55
           exclude {
             axis {
               name 'PLATFORM'

@@ -43,7 +43,7 @@ pipeline {
           }
           axis {
             name 'PLATFORM'
-            values 'ubuntu-18 && immutable', 'windows-2019 && immutable'
+            values 'ubuntu-18 && immutable', 'windows-2019 && immutable', 'macos11 && x86_64'
           }
         }
         excludes {
@@ -55,6 +55,17 @@ pipeline {
             axis {
               name 'GO_VERSION'
               values '1.15'
+            }
+          }
+          // Mac os builds are disabled. See https://github.com/elastic/go-txfile/issues/55
+          exclude {
+            axis {
+              name 'PLATFORM'
+              values 'macos11 && x86_64'
+            }
+            axis {
+              name 'GO_VERSION'
+              values '1.13', '1.12'
             }
           }
         }

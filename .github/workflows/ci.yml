@@ -34,8 +34,8 @@ jobs:
         exclude:
           - os: macos-latest
             go-version: '1.12'
-          - os: '1.13'
-            go-version: 16
+          - os: macos-latest
+            go-version: '1.13'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -57,3 +57,5 @@ jobs:
             .ci/test.sh
           fi
         shell: bash
+        env:
+          GO_VERSION: ${{ matrix.go-version }}

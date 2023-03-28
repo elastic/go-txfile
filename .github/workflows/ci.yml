@@ -59,3 +59,11 @@ jobs:
         shell: bash
         env:
           GO_VERSION: ${{ matrix.go-version }}
+
+      - name: Store test results
+        if: success() || failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: "build/junit-*.xml"

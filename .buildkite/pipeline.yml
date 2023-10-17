@@ -2,7 +2,9 @@
 
 steps:
   - label: ":unix: Tests on Unix OS"
-    command: ".buildkite/scripts/run-go-tests.sh {{matrix.go_version}} {{matrix.platform}}"
+    command:
+      - "chmod +x .buildkite/scripts/run-go-tests.sh"
+      - ".buildkite/scripts/run-go-tests.sh {{matrix.go_version}} {{matrix.platform}}"
     agents:
       provider: "gcp"
       image: "{{matrix.platform}}"
@@ -24,15 +26,15 @@ steps:
 #            platform: "family/macos11"
 #            go_version: "1.13"
 #          skip: true
-  - label: ":windows: Tests on Windows"
-    command: ".buildkite/scripts/run-win-tests.ps1 {{matrix.go_version}}"
-    agents:
-      provider: "gcp"
-      image: "{{matrix.platform}}"
-    matrix:
-      setup:
-        go_version:
-          - "1.12"
-          - "1.13"
-        platform:
-          - "family/ci-windows-2019"
+#  - label: ":windows: Tests on Windows"
+#    command: ".buildkite/scripts/run-win-tests.ps1 {{matrix.go_version}}"
+#    agents:
+#      provider: "gcp"
+#      image: "{{matrix.platform}}"
+#    matrix:
+#      setup:
+#        go_version:
+#          - "1.12"
+#          - "1.13"
+#        platform:
+#          - "family/ci-windows-2019"

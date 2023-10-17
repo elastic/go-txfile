@@ -32,7 +32,7 @@ spec:
       name: go-txfile
     spec:
 #      branch_configuration: main
-#      pipeline_file: ".buildkite/pipeline.yml"
+      pipeline_file: ".buildkite/pipeline.yml"
 #      provider_settings:
 #        build_tags: false # just run on demand
 #        build_branches: false # just run on demand

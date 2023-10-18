@@ -5,7 +5,6 @@ env:
 steps:
   - label: ":unix: Testing on {{matrix.platform}}"
     command:
-#      - "git update-index --chmod=+x .buildkite/scripts/run-go-tests.sh"
       - ".buildkite/scripts/run-go-tests.sh {{matrix.go_version}} {{matrix.platform}}"
     agents:
       provider: "gcp"
@@ -17,8 +16,7 @@ steps:
           - "1.13"
           - "1.15"
         platform:
-#          - "family/core-ubuntu-1804"
-          - "golang:{{matrix.go_version}}"
+          - "family/core-ubuntu-1804"
 #          - "family/macos11"
 #      adjustments:
 #        - with:

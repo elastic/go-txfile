@@ -24,13 +24,13 @@ install_go_dependencies() {
     local install_packages=(
             "github.com/magefile/mage"
             "github.com/elastic/go-licenser"
-#            "golang.org/x/tools/cmd/goimports"
+            "golang.org/x/tools/cmd/goimports@v0.4.0"
             "github.com/jstemmer/go-junit-report"
             "gotest.tools/gotestsum"
     )
     create_workspace
     for pkg in "${install_packages[@]}"; do
-        go get "${pkg}@latest"
+        go get "${pkg}"
     done
 }
 

@@ -21,11 +21,10 @@ with_go() {
 }
 
 install_go_dependencies() {
-    local go_version="${1:-latest}"
     local install_packages=(
             "github.com/magefile/mage"
             "github.com/elastic/go-licenser"
-            "golang.org/x/tools/cmd/goimports"
+#            "golang.org/x/tools/cmd/goimports"
             "github.com/jstemmer/go-junit-report"
             "gotest.tools/gotestsum"
     )

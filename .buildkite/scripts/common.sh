@@ -24,7 +24,7 @@ install_go_dependencies() {
     local install_packages=(
             "github.com/magefile/mage"
             "github.com/elastic/go-licenser"
-            "golang.org/x/tools/cmd/goimports@v0.1.0"
+            "golang.org/x/tools/cmd/goimports@v0.1.8"
             "github.com/jstemmer/go-junit-report"
             "gotest.tools/gotestsum@v1.7.0"
     )
@@ -32,6 +32,9 @@ install_go_dependencies() {
     for pkg in "${install_packages[@]}"; do
         go get "${pkg}"
     done
+
+# "golang.org/x/tools/cmd/goimports@v0.1.12" 1.13/1.15
+# "golang.org/x/tools/cmd/goimports@v0.1.0" 1.12
 }
 
 create_workspace() {

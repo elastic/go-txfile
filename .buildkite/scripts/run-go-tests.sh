@@ -9,7 +9,7 @@ PLATFORM=$2
 OUT_FILE="build/test-report.out"
 
 with_go
-install_go $GO_VERSION $PLATFORM
+install_go_dependencies $GO_VERSION $PLATFORM
 
 # Run the tests
 set +e

@@ -18,7 +18,7 @@ with_go() {
     export PATH="${PATH}:$(go env GOPATH):$(go env GOPATH)/bin"
 }
 
-install_go() {
+install_go_dependencies() {
     local go_version="${1:-latest}"
     local install_packages=(
             "github.com/magefile/mage"
@@ -55,4 +55,23 @@ check_platform_architeture() {
     echo "The current platform/OS type is unsupported yet"
     ;;
   esac
+}
+
+retry() {
+    local retries=$1
+    shift
+    local count=0
+    until "$@"; do
+        exit=$?
+        wait=$((2 ** count))
+        count=$((count + 1))
+        if [ $count -lt "$retries" ]; then
+            >&2 echo "Retry $count/$retries exited $exit, retrying in $wait seconds..."
+            sleep $wait
+        else
+            >&2 echo "Retry $count/$retries exited $exit, no more retries left."
+            return $exit
+        fi
+    done
+    return 0
 }

@@ -3,10 +3,10 @@ env:
   SETUP_GVM_VERSION: "v0.5.1"
 
 steps:
+  - label: "Execution Params"
+    command: "buildkite-agent annotate 'Platform: {{matrix.go_version}} GoLang Version: {{matrix.go_version}}' --style 'info' --context 'ctx-info'"
   - label: ":unix: Testing on {{matrix.platform}}"
     command:
-      - "buildkite-agent annotate 'Platform: {{matrix.go_version}}
-        GoLang Version: {{matrix.go_version}} `info` style' --style 'info' --context 'ctx-info'"
       - ".buildkite/scripts/run-go-tests.sh {{matrix.go_version}} {{matrix.platform}}"
     agents:
       provider: "gcp"

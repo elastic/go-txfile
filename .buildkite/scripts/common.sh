@@ -31,7 +31,7 @@ install_go_dependencies() {
     )
     create_workspace
     for pkg in "${install_packages[@]}"; do
-        go get "${pkg}@${go_version}"
+        go get "${pkg}@latest"
     done
 }
 

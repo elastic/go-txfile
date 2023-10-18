@@ -13,8 +13,8 @@ steps:
       setup:
         go_version:
           - "1.12"
-#          - "1.13"
-#          - "1.15"
+          - "1.13"
+          - "1.15"
         platform:
           - "family/core-ubuntu-1804"
 #          - "family/macos11"

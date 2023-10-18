@@ -26,7 +26,7 @@ install_go_dependencies() {
             "github.com/elastic/go-licenser"
             "golang.org/x/tools/cmd/goimports@v0.1.9"
             "github.com/jstemmer/go-junit-report"
-            "gotest.tools/gotestsum@v1.6.1"
+            "gotest.tools/gotestsum@v0.6.0"
     )
     create_workspace
     for pkg in "${install_packages[@]}"; do

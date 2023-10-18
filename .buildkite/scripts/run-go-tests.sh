@@ -8,7 +8,7 @@ GO_VERSION=$1
 PLATFORM=$2
 OUT_FILE="build/test-report.out"
 
-with_go
+#with_go
 install_go_dependencies $GO_VERSION $PLATFORM
 
 # Run the tests

@@ -17,7 +17,8 @@ steps:
           - "1.13"
           - "1.15"
         platform:
-          - "family/core-ubuntu-1804"
+#          - "family/core-ubuntu-1804"
+          - "golang:${GO_VERSION}"
 #          - "family/macos11"
 #      adjustments:
 #        - with:

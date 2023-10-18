@@ -24,7 +24,7 @@ install_go_dependencies() {
     local install_packages=(
             "github.com/magefile/mage"
             "github.com/elastic/go-licenser"
-            "golang.org/x/tools/cmd/goimports@v0.1.12"
+            "golang.org/x/tools/cmd/goimports@v0.1.0"
             "github.com/jstemmer/go-junit-report"
             "gotest.tools/gotestsum@v1.7.0"
     )

@@ -18,7 +18,7 @@ steps:
           - "1.15"
         platform:
 #          - "family/core-ubuntu-1804"
-          - "golang:${GO_VERSION}"
+          - "golang:{{matrix.go_version}}"
 #          - "family/macos11"
 #      adjustments:
 #        - with:

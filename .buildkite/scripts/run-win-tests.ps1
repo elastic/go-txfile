@@ -21,8 +21,8 @@ function fixCRLF {
 }
 
 function withGolang($version) {
-    Write-Host "-- Install golang --"
-    choco install -y golang --version $version
+    Write-Host "-- Install golang $version --"
+    choco install golang -y --version $version
     $choco = Convert-Path "$((Get-Command choco).Path)\..\.."
     Import-Module "$choco\helpers\chocolateyProfile.psm1"
     refreshenv

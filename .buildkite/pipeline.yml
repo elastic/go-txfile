@@ -3,7 +3,7 @@
 steps:
   - label: ":unix: Tests on Unix OS"
     command:
-      - "git update-index --chmod=+x .buildkite/scripts/run-go-tests.sh"
+#      - "git update-index --chmod=+x .buildkite/scripts/run-go-tests.sh"
       - ".buildkite/scripts/run-go-tests.sh {{matrix.go_version}} {{matrix.platform}}"
     agents:
       provider: "gcp"
@@ -16,25 +16,25 @@ steps:
           - "1.15"
         platform:
           - "family/core-ubuntu-1804"
-#          - "family/macos11"
-#      adjustments:
-#        - with:
-#            platform: "family/macos11"
-#            go_version: "1.12"
-#          skip: true
-#        - with:
-#            platform: "family/macos11"
-#            go_version: "1.13"
-#          skip: true
-#  - label: ":windows: Tests on Windows"
-#    command: ".buildkite/scripts/run-win-tests.ps1 {{matrix.go_version}}"
-#    agents:
-#      provider: "gcp"
-#      image: "{{matrix.platform}}"
-#    matrix:
-#      setup:
-#        go_version:
-#          - "1.12"
-#          - "1.13"
-#        platform:
-#          - "family/ci-windows-2019"
+          - "family/macos11"
+      adjustments:
+        - with:
+            platform: "family/macos11"
+            go_version: "1.12"
+          skip: true
+        - with:
+            platform: "family/macos11"
+            go_version: "1.13"
+          skip: true
+  - label: ":windows: Tests on Windows"
+    command: ".buildkite/scripts/run-win-tests.ps1 {{matrix.go_version}}"
+    agents:
+      provider: "gcp"
+      image: "{{matrix.platform}}"
+    matrix:
+      setup:
+        go_version:
+          - "1.12"
+          - "1.13"
+        platform:
+          - "family/ci-windows-2019"

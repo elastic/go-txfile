@@ -24,7 +24,7 @@ function withGolang($version) {
 
 }
 
-function installGoDependencies($version) {
+function installGoDependencies() {
     $installPackages = @(
         "github.com/magefile/mage"
         "github.com/elastic/go-licenser"
@@ -33,7 +33,7 @@ function installGoDependencies($version) {
         "gotest.tools/gotestsum"
     )
     foreach ($pkg in $installPackages) {
-        go install "$pkg@$version"
+        go get "$pkg"
     }
 }
 

@@ -1,10 +1,3 @@
-#mkdir -p build
-#SET OUT_FILE=build\output-report.out
-#mage -v test > %OUT_FILE% | type %OUT_FILE%
-#go get -v -u github.com/tebeka/go2xunit
-#go2xunit -fail -input %OUT_FILE% -output build\junit-%GO_VERSION%.xml
-
-
 # TODO set $PATH to point to $GOROOT/bin
 
 $GoVersion=$args[0]
@@ -28,6 +21,7 @@ function withGolang($version) {
     refreshenv
     go version
     go env
+
 }
 
 function installGoDependencies($version) {
@@ -44,7 +38,8 @@ function installGoDependencies($version) {
 }
 
 fixCRLF
-withGolang $env:GO_VERSION_CHOCO
+#withGolang $env:GO_VERSION_CHOCO
+withGolang $GoVersion
 installGoDependencies
 
 $ErrorActionPreference = "Continue" # set +e
@@ -53,8 +48,6 @@ New-Item -ItemType Directory -Force -Path "build"
 mage -v test | Out-File -FilePath $OutFile
 go get -v -u github.com/tebeka/go2xunit
 go2xunit -fail -input $OutFile -output build\junit-$GoVersion.xml
-
-#gotestsum --format testname --junitfile junit-win-report.xml -- -v ./...
 
 $EXITCODE=$LASTEXITCODE
 $ErrorActionPreference = "Stop"

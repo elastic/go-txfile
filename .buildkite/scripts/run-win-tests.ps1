@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop" # set -e
 # Doing this here because we cannot set git clone options before.
 function fixCRLF {
     Write-Host "-- Fixing CRLF in git checkout --"
-    git config core.autocrlf input
+    git config core.autocrlf true
     git rm --quiet --cached -r .
     git reset --quiet --hard
 }
@@ -29,7 +29,7 @@ function installGoDependencies() {
         "github.com/magefile/mage"
         "github.com/elastic/go-licenser"
         "golang.org/x/tools/cmd/goimports@v0.1.9"
-        "github.com/jstemmer/go-junit-report/v2"
+        "github.com/jstemmer/go-junit-report"
 #        "gotest.tools/gotestsum"
     )
     foreach ($pkg in $installPackages) {
@@ -44,9 +44,10 @@ installGoDependencies
 $ErrorActionPreference = "Continue" # set +e
 
 New-Item -ItemType Directory -Force -Path "build"
-mage -v test | Out-File -FilePath $OutFile
 go get -v -u github.com/tebeka/go2xunit
-go2xunit -fail -input $OutFile -output build\junit-$GoVersion.xml
+mage test | go2xunit -fail -output build\junit-$GoVersion.xml
+#mage test | Out-File -FilePath $OutFile
+#go2xunit -fail -input $OutFile -output build\junit-$GoVersion.xml
 
 $EXITCODE=$LASTEXITCODE
 $ErrorActionPreference = "Stop"

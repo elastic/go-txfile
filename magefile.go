@@ -188,7 +188,7 @@ func Test() error {
 				tst.UseBinaryIf(bin, useBinary),
 				tst.WithCoverage(path.Join(home, "cover.out")),
 				tst.Short(envTestShort),
-				tst.Out(bin),
+// 				tst.Out(bin),
 				tst.Package(pkg),
 				tst.Verbose(true),
 			)

@@ -28,9 +28,9 @@ function installGoDependencies() {
     $installPackages = @(
         "github.com/magefile/mage"
         "github.com/elastic/go-licenser"
-        "golang.org/x/tools/cmd/goimports"
+        "golang.org/x/tools/cmd/goimports@v0.1.9"
         "github.com/jstemmer/go-junit-report/v2"
-        "gotest.tools/gotestsum"
+#        "gotest.tools/gotestsum"
     )
     foreach ($pkg in $installPackages) {
         go get "$pkg"
@@ -38,7 +38,6 @@ function installGoDependencies() {
 }
 
 fixCRLF
-#withGolang $env:GO_VERSION_CHOCO
 withGolang $GoVersion
 installGoDependencies
 

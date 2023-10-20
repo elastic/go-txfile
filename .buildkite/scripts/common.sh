@@ -22,14 +22,14 @@ with_go() {
 
 install_go_dependencies() {
     local install_packages=(
-            "github.com/magefile/mage"
-            "github.com/elastic/go-licenser"
-            "golang.org/x/tools/cmd/goimports"
-            "github.com/jstemmer/go-junit-report"
+            "github.com/magefile/mage@v1.15.0"
+            "github.com/elastic/go-licenser@v0.4.1"
+            "golang.org/x/tools/cmd/goimports@v0.14.0"
+            "github.com/jstemmer/go-junit-report@v1.0.0"
     )
     create_workspace
     for pkg in "${install_packages[@]}"; do
-        go install "${pkg}@latest"
+        go install "${pkg}"
     done
 }
 

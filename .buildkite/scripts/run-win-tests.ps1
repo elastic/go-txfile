@@ -26,13 +26,13 @@ function withGolang($version) {
 
 function installGoDependencies() {
     $installPackages = @(
-        "github.com/magefile/mage"
-        "github.com/elastic/go-licenser"
-        "golang.org/x/tools/cmd/goimports@v0.1.9"
-        "github.com/jstemmer/go-junit-report"
+        "github.com/magefile/mage@v1.15.0"
+        "github.com/elastic/go-licenser@v0.4.1"
+        "golang.org/x/tools/cmd/goimports@v0.14.0"
+        "github.com/jstemmer/go-junit-report@v1.0.0"
     )
     foreach ($pkg in $installPackages) {
-        go get "$pkg"
+        go install "$pkg"
     }
 }
 

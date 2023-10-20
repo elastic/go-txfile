@@ -13,9 +13,7 @@ steps:
     matrix:
       setup:
         go_version:
-          - "1.12"
-          - "1.13"
-          - "1.15"
+          - "1.17"
         platform:
           - "family/core-ubuntu-1804"
 #          - "family/macos11"
@@ -39,8 +37,7 @@ steps:
     matrix:
       setup:
         go_version:
-          - "1.12"
-          - "1.13"
+          - "1.17"
         platform:
           - "family/ci-windows-2019"
 

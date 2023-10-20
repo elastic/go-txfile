@@ -29,7 +29,7 @@ install_go_dependencies() {
     )
     create_workspace
     for pkg in "${install_packages[@]}"; do
-        go install "${pkg}"
+        go install "${pkg}@latest"
     done
 }
 

@@ -24,21 +24,13 @@ install_go_dependencies() {
     local install_packages=(
             "github.com/magefile/mage"
             "github.com/elastic/go-licenser"
-            "golang.org/x/tools/cmd/goimports@v0.1.9"
+            "golang.org/x/tools/cmd/goimports"
             "github.com/jstemmer/go-junit-report"
-#            "gotest.tools/gotestsum@v1.7.0" - not working with Go 1.12 gotest.tools/v3@v3.0.3: unknown revision gotest.tools/v3.0.3
     )
     create_workspace
     for pkg in "${install_packages[@]}"; do
-        go get "${pkg}"
+        go install "${pkg}"
     done
-
-# "golang.org/x/tools/cmd/goimports@v0.1.12" 1.13/1.15
-
-# 1.12
-# "golang.org/x/tools/cmd/goimports@v0.1.9" - higher require Go 1.17 (go/pkg/mod/golang.org/x/mod@v0.6.0-dev.0.20220419223038-86c51ed26bb4/module/module.go:147:5: undefined: errors.As
-                                                                      #note: module requires Go 1.17)
-}
 
 create_workspace() {
     if [[ ! -d "${WORKSPACE}" ]]; then

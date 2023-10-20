@@ -10,6 +10,7 @@ steps:
     agents:
       provider: "gcp"
       image: "{{matrix.platform}}"
+    artifact_paths: "build/*.xml"
     matrix:
       setup:
         go_version:

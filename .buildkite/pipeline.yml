@@ -18,15 +18,6 @@ steps:
         platform:
           - "family/core-ubuntu-1804"
 #          - "family/macos11"
-#      adjustments:
-#        - with:
-#            platform: "family/macos11"
-#            go_version: "1.12"
-#          skip: true
-#        - with:
-#            platform: "family/macos11"
-#            go_version: "1.13"
-#          skip: true
 
   - label: ":windows: Tests on Windows"
     key: windows-test
@@ -43,15 +34,15 @@ steps:
           - "family/ci-windows-2019"
 
 # Temporarily skipped due to issue with artifact upload
-#  - label: ":junit: Junit annotate"
-#    plugins:
-#      - junit-annotate#v2.4.1:
-#          artifacts: "build/*.xml"
-#          fail-build-on-error: true
-#    agents:
-#      provider: "gcp"
-#    depends_on:
-#      - step: "linux-test"
-#        allow_failure: true
-#      - step: "windows-test"
-#        allow_failure: true
+  - label: ":junit: Junit annotate"
+    plugins:
+      - junit-annotate#v2.4.1:
+          artifacts: "build/*.xml"
+          fail-build-on-error: true
+    agents:
+      provider: "gcp"
+    depends_on:
+      - step: "linux-test"
+        allow_failure: true
+      - step: "windows-test"
+        allow_failure: true

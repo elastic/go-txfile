@@ -31,6 +31,7 @@ install_go_dependencies() {
     for pkg in "${install_packages[@]}"; do
         go install "${pkg}"
     done
+}
 
 create_workspace() {
     if [[ ! -d "${WORKSPACE}" ]]; then

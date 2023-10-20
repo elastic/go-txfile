@@ -44,7 +44,7 @@ $ErrorActionPreference = "Continue" # set +e
 
 New-Item -ItemType Directory -Force -Path "build"
 go get -v -u github.com/tebeka/go2xunit
-mage test | go2xunit -fail -output build\junit-$GoVersion-win.xml
+mage test | go2xunit -fail -output build\junit-$GoVersion.xml
 
 $EXITCODE=$LASTEXITCODE
 $ErrorActionPreference = "Stop"

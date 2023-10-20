@@ -188,7 +188,7 @@ func Test() error {
 				tst.UseBinaryIf(bin, useBinary),
 				tst.WithCoverage(path.Join(home, "cover.out")),
 				tst.Short(envTestShort),
-				tst.Out(bin),
+// 				tst.Out(bin), - due to bin file tests are failing on Windows, since it seems not to be used - it's disabled
 				tst.Package(pkg),
 				tst.Verbose(true),
 			)

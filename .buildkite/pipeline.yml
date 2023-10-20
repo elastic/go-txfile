@@ -1,5 +1,48 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/buildkite/pipeline-schema/main/schema.json
+env:
+  SETUP_GVM_VERSION: "v0.5.1"
 
 steps:
-  - label: "Example test"
-    command: echo "Hello!"
+  - label: ":unix: Testing on {{matrix.platform}}"
+    key: linux-test
+    command:
+      - ".buildkite/scripts/run-go-tests.sh {{matrix.go_version}} {{matrix.platform}}"
+    agents:
+      provider: "gcp"
+      image: "{{matrix.platform}}"
+    artifact_paths: "build/*.xml"
+    matrix:
+      setup:
+        go_version:
+          - "1.17"
+        platform:
+          - "family/core-ubuntu-1804"
+#          - "family/macos11"
+
+  - label: ":windows: Tests on Windows"
+    key: windows-test
+    command: ".buildkite/scripts/run-win-tests.ps1 {{matrix.go_version}}"
+    agents:
+      provider: "gcp"
+      image: "{{matrix.platform}}"
+    artifact_paths: "build/*.xml"
+    matrix:
+      setup:
+        go_version:
+          - "1.17"
+        platform:
+          - "family/ci-windows-2019"
+
+# Temporarily skipped due to issue with artifact upload
+#  - label: ":junit: Junit annotate"
+#    plugins:
+#      - junit-annotate#v2.4.1:
+#          artifacts: "build/*.xml"
+#          fail-build-on-error: true
+#    agents:
+#      provider: "gcp"
+#    depends_on:
+#      - step: "linux-test"
+#        allow_failure: true
+#      - step: "windows-test"
+#        allow_failure: true

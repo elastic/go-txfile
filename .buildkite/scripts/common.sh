@@ -7,7 +7,7 @@ HW_TYPE="$(uname -m)"
 PLATFORM_TYPE="$(uname)"
 
 with_go() {
-    local go_version="${1:-latest}"
+    local go_version="${1}"
     echo "Setting up the Go environment..."
     create_workspace
     check_platform_architeture

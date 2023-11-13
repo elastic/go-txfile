@@ -17,9 +17,8 @@ steps:
           - "1.17"
         platform:
           - "family/core-ubuntu-1804"
-#          - "family/macos11"
 
-  - label: ":windows: Tests on Windows"
+  - label: ":windows: Testing on Windows"
     key: windows-test
     command: ".buildkite/scripts/run-win-tests.ps1 {{matrix.go_version}}"
     agents:
@@ -32,6 +31,14 @@ steps:
           - "1.17"
         platform:
           - "family/ci-windows-2019"
+
+  - label: ":mac: Testing on MacOS"
+    key: macos-test
+    command: ".buildkite/scripts/run-go-tests.sh 1.17"
+    agents:
+      provider: "orka"
+      image: "generic-13-ventura-x64"
+    artifact_paths: "build/*.xml"
 
 # Temporarily skipped due to issue with artifact upload
 #  - label: ":junit: Junit annotate"

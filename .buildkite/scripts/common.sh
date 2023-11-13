@@ -26,6 +26,7 @@ install_go_dependencies() {
             "github.com/elastic/go-licenser@v0.4.1"
             "golang.org/x/tools/cmd/goimports@v0.14.0"
             "github.com/jstemmer/go-junit-report@v1.0.0"
+            "github.com/tebeka/go2xunit"
     )
     create_workspace
     for pkg in "${install_packages[@]}"; do

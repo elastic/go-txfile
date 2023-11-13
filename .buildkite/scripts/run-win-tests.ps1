@@ -30,6 +30,7 @@ function installGoDependencies() {
         "github.com/elastic/go-licenser@v0.4.1"
         "golang.org/x/tools/cmd/goimports@v0.14.0"
         "github.com/jstemmer/go-junit-report@v1.0.0"
+        "github.com/tebeka/go2xunit"
     )
     foreach ($pkg in $installPackages) {
         go install "$pkg"
@@ -43,7 +44,7 @@ installGoDependencies
 $ErrorActionPreference = "Continue" # set +e
 
 New-Item -ItemType Directory -Force -Path "build"
-go get -v -u github.com/tebeka/go2xunit
+#go get -v -u github.com/tebeka/go2xunit
 mage test | go2xunit -fail -output build\junit-$GoVersion.xml
 
 $EXITCODE=$LASTEXITCODE

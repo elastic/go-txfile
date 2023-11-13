@@ -141,6 +141,7 @@ func (Build) Test() error {
 			tst.Out(path.Join(buildHome, pkg, path.Base(pkg))),
 			tst.WithCoverage(""),
 			tst.Package(pkg),
+			clitool.Flag("-timeout", "30m"),
 		)
 	})
 }

@@ -34,7 +34,7 @@ steps:
 
   - label: ":mac: Testing on MacOS"
     key: macos-test
-    command: ".buildkite/scripts/run-go-tests.sh 1.17"
+    command: ".buildkite/scripts/run-go-tests.sh 1.17 generic-13-ventura-x64"
     agents:
       provider: "orka"
       imagePrefix: "generic-13-ventura-x64"

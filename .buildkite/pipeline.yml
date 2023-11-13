@@ -37,7 +37,7 @@ steps:
     command: ".buildkite/scripts/run-go-tests.sh 1.17"
     agents:
       provider: "orka"
-      image: "generic-13-ventura-x64"
+      imagePrefix: "generic-13-ventura-x64"
     artifact_paths: "build/*.xml"
 
 # Temporarily skipped due to issue with artifact upload

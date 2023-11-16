@@ -33,6 +33,7 @@ spec:
     spec:
       branch_configuration: main
       pipeline_file: ".buildkite/pipeline.yml"
+      maximum_timeout_in_minutes: 120
       provider_settings:
         build_tags: false # just run on demand
         build_branches: false # just run on demand

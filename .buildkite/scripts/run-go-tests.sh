@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -euxo pipefail
 
 source .buildkite/scripts/common.sh
 
@@ -16,6 +16,7 @@ set +e
 mkdir -p build
 mage -v test | tee ${OUT_FILE}
 status=$?
-go2xunit -fail -input ${OUT_FILE} -output "build/junit-${GO_VERSION}.xml"
+# go2xunit -fail -input ${OUT_FILE} -output "build/junit-${GO_VERSION}.xml"
+go-junit-report -in build/test-report.out -iocopy  -out build/junit-${GO_VERSION}.xml
 
 exit ${status}

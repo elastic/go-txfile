@@ -18,9 +18,11 @@
 package osfstest
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
+	"time"
 )
 
 type testing interface {
@@ -32,6 +34,8 @@ type testing interface {
 // deleting the temporary directory are returned.
 // On failure the Fatal method of t will be executed.
 func SetupPath(t testing, file string) (fileName string, teardown func()) {
+	//Debug for macos
+	startTime := time.Now()
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {
 		t.Fatal(err)
@@ -40,6 +44,11 @@ func SetupPath(t testing, file string) (fileName string, teardown func()) {
 	if file == "" {
 		file = "test.dat"
 	}
+	//Debug for macos
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	fmt.Printf("SetupPath: Elapsed time: %s\n", elapsedTime)
+
 	return path.Join(dir, file), func() {
 		os.RemoveAll(dir)
 	}

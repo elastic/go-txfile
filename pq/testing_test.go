@@ -65,6 +65,7 @@ func setupQueue(t *mint.T, cfg config) (*testQueue, func()) {
 
 	tq.Open()
 	ok = true
+
 	return tq, func() {
 		tq.Close()
 		teardown()

@@ -25,7 +25,7 @@ install_go_dependencies() {
             "github.com/magefile/mage@v1.15.0"
             "github.com/elastic/go-licenser@v0.4.1"
             "golang.org/x/tools/cmd/goimports@v0.14.0"
-            "github.com/jstemmer/go-junit-report@v1.0.0"
+            "github.com/jstemmer/go-junit-report/v2@v2.1.0"
             "github.com/tebeka/go2xunit@v1.4.10"
     )
     create_workspace

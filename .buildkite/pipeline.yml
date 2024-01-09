@@ -38,8 +38,8 @@ steps:
     agents:
       provider: "orka"
       imagePrefix: "generic-13-ventura-x64"
+      cpu: 4
     artifact_paths: "build/*.xml"
-
 # Temporarily skipped due to issue with artifact upload
 #  - label: ":junit: Junit annotate"
 #    plugins:

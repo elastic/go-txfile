@@ -7,7 +7,7 @@ HW_TYPE="$(uname -m)"
 PLATFORM_TYPE="$(uname)"
 
 with_go() {
-    local go_version="${1:-latest}"
+    local go_version="${1}"
     echo "Setting up the Go environment..."
     create_workspace
     check_platform_architeture
@@ -25,7 +25,8 @@ install_go_dependencies() {
             "github.com/magefile/mage@v1.15.0"
             "github.com/elastic/go-licenser@v0.4.1"
             "golang.org/x/tools/cmd/goimports@v0.14.0"
-            "github.com/jstemmer/go-junit-report@v1.0.0"
+            "github.com/jstemmer/go-junit-report/v2@v2.1.0"
+            "github.com/tebeka/go2xunit@v1.4.10"
     )
     create_workspace
     for pkg in "${install_packages[@]}"; do

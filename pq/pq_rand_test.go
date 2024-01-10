@@ -179,7 +179,6 @@ func runScenario(t *mint.T, cfg config, ops scenario) bool {
 
 		if op.exec != nil {
 			op.exec(ctx, qu)
-
 			if t.Failed() {
 				return false
 			}

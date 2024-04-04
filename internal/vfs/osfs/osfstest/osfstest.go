@@ -40,6 +40,7 @@ func SetupPath(t testing, file string) (fileName string, teardown func()) {
 	if file == "" {
 		file = "test.dat"
 	}
+
 	return path.Join(dir, file), func() {
 		os.RemoveAll(dir)
 	}

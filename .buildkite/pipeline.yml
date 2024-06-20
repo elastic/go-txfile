@@ -30,7 +30,7 @@ steps:
         go_version:
           - "1.17"
         platform:
-          - "family/ci-windows-2019"
+          - "family/core-windows-2019"
 
   - label: ":mac: Testing on MacOS"
     key: macos-test

@@ -16,7 +16,7 @@ steps:
         go_version:
           - "1.17"
         platform:
-          - "family/core-ubuntu-1804"
+          - "family/core-ubuntu-2204"
 
   - label: ":windows: Testing on Windows"
     key: windows-test

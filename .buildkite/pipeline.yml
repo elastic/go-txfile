@@ -36,7 +36,7 @@ steps:
     key: macos-test
     command: ".buildkite/scripts/run-go-tests.sh 1.17 generic-13-ventura-x64"
     agents:
-      provider: "orka"
+      provider: "orka3"
       imagePrefix: "generic-13-ventura-x64"
       cpu: 4
     artifact_paths: "build/*.xml"

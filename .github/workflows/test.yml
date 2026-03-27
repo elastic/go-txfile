@@ -1,0 +1,42 @@
+---
+name: test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025
+          - macos-15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.17'
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          go install github.com/magefile/mage@v1.15.0
+          go install github.com/elastic/go-licenser@v0.4.1
+          go install golang.org/x/tools/cmd/goimports@v0.14.0
+
+      - name: Run tests
+        shell: bash
+        run: mage -v test
